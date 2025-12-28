@@ -16,6 +16,8 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: ""
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: NO
 
 targets:
   LocalFlow:
@@ -42,14 +44,13 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: "$(PROJECT_DIR)/LocalFlow/LocalFlow-Bridging-Header.h"
         OTHER_LDFLAGS:
           - "-lwhisper"
-          - "-lwhisper.coreml"
           - "-lggml"
           - "-lggml-base"
           - "-lggml-cpu"
           - "-lggml-metal"
           - "-lggml-blas"
           - "-lc++"
-        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_HARDENED_RUNTIME: NO
         LSUIElement: YES
     dependencies:
       - sdk: Metal.framework

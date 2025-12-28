@@ -9,10 +9,12 @@
 /* Begin PBXBuildFile section */
 		1E291C26A6AF62EB186277B3 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 68BB7B6BA5E80AC3571DF2E6 /* ApplicationServices.framework */; };
 		2BF0D00DB0347C4BF1701729 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4926CA88782E797391AA3917 /* AppDelegate.swift */; };
+		4DB5504ECD033C7275FB00E0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5E291ECD81FBAA816F8D5358 /* Assets.xcassets */; };
 		5BAEE31C23BA6DDC868EE019 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EBA3FD33E3056EFE232F9D08 /* Accelerate.framework */; };
 		6F7651ABEAB6C37D2752F4D8 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A35D90C2F8BB2652B1B446 /* HotkeyManager.swift */; };
 		6FDD340D6A87280874E0FD52 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 451375EE2B83415BA4A40350 /* AVFoundation.framework */; };
 		76B75C03D58E8EE6D5EA4C5C /* WhisperService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73C2F2ACA627850ED57A544E /* WhisperService.swift */; };
+		8A87B389601E5FEF9158F176 /* RecordingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745F7EE1D382EA1E1BF7E612 /* RecordingOverlay.swift */; };
 		8DA344ACD7809FAFD4D568C0 /* LocalFlowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7DE224E088ADB54CAC484FA /* LocalFlowApp.swift */; };
 		A6828905AAA24FF3203EEF23 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D4963518FED3AC5E1B3E25D /* MenuBarView.swift */; };
 		B23739ACF85A23D02558D3EA /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F3B2253C0690986F460341 /* Carbon.framework */; };
@@ -39,8 +41,10 @@
 		451375EE2B83415BA4A40350 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		4834B956CC2BDBDEC51D78E6 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		4926CA88782E797391AA3917 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		5E291ECD81FBAA816F8D5358 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		68BB7B6BA5E80AC3571DF2E6 /* ApplicationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ApplicationServices.framework; path = System/Library/Frameworks/ApplicationServices.framework; sourceTree = SDKROOT; };
 		73C2F2ACA627850ED57A544E /* WhisperService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperService.swift; sourceTree = "<group>"; };
+		745F7EE1D382EA1E1BF7E612 /* RecordingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlay.swift; sourceTree = "<group>"; };
 		8040A37B08BE8E069A106059 /* LocalFlow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalFlow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8278B549A5B6B2B152101E7E /* LocalFlow.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LocalFlow.entitlements; sourceTree = "<group>"; };
 		9DC11B68FE5CE2E3F8CB2EAF /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -92,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				0D4963518FED3AC5E1B3E25D /* MenuBarView.swift */,
+				745F7EE1D382EA1E1BF7E612 /* RecordingOverlay.swift */,
 				9DC11B68FE5CE2E3F8CB2EAF /* SettingsView.swift */,
 			);
 			path = Views;
@@ -105,6 +110,7 @@
 				70716601B7E67B354A77D3B6 /* Resources */,
 				30DA9056EC0C2F3487DCF9DC /* Services */,
 				32D4BF85F9C3F53C95542F7D /* Views */,
+				5E291ECD81FBAA816F8D5358 /* Assets.xcassets */,
 				0CCAA17F44731FCF77F4790A /* Info.plist */,
 				1C75A2F361D7C62D228DF9DD /* LocalFlow-Bridging-Header.h */,
 				8278B549A5B6B2B152101E7E /* LocalFlow.entitlements */,
@@ -167,6 +173,7 @@
 			buildConfigurationList = 88C5EED11C53467EE680536E /* Build configuration list for PBXNativeTarget "LocalFlow" */;
 			buildPhases = (
 				948A7A4C93BFD0E8ED0F172E /* Sources */,
+				A68E172BC1358603EF46C4A3 /* Resources */,
 				0C6AB9416171EBC4B7A86F67 /* Frameworks */,
 			);
 			buildRules = (
@@ -214,6 +221,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		A68E172BC1358603EF46C4A3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4DB5504ECD033C7275FB00E0 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		948A7A4C93BFD0E8ED0F172E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -225,6 +243,7 @@
 				6F7651ABEAB6C37D2752F4D8 /* HotkeyManager.swift in Sources */,
 				8DA344ACD7809FAFD4D568C0 /* LocalFlowApp.swift in Sources */,
 				A6828905AAA24FF3203EEF23 /* MenuBarView.swift in Sources */,
+				8A87B389601E5FEF9158F176 /* RecordingOverlay.swift in Sources */,
 				CCD99E3428D44D40DF1201B4 /* Settings.swift in Sources */,
 				F2B0274768F0B351696CE036 /* SettingsView.swift in Sources */,
 				ED8B4ED7B317EAC2F73E6A17 /* TextInserter.swift in Sources */,
@@ -241,7 +260,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = LocalFlow/LocalFlow.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/vendor/whisper.cpp/include",
 					"$(PROJECT_DIR)/vendor/whisper.cpp/ggml/include",
@@ -257,7 +276,6 @@
 				LSUIElement = YES;
 				OTHER_LDFLAGS = (
 					"-lwhisper",
-					"-lwhisper.coreml",
 					"-lggml",
 					"-lggml-base",
 					"-lggml-cpu",
@@ -277,7 +295,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = LocalFlow/LocalFlow.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/vendor/whisper.cpp/include",
 					"$(PROJECT_DIR)/vendor/whisper.cpp/ggml/include",
@@ -293,7 +311,6 @@
 				LSUIElement = YES;
 				OTHER_LDFLAGS = (
 					"-lwhisper",
-					"-lwhisper.coreml",
 					"-lggml",
 					"-lggml-base",
 					"-lggml-cpu",
@@ -311,6 +328,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -359,6 +377,7 @@
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_NAME = LocalFlow;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -371,6 +390,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -425,7 +445,7 @@
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
+				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_NAME = LocalFlow;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;

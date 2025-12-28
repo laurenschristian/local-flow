@@ -3,17 +3,16 @@ import Foundation
 
 class AudioRecorder {
     private var audioEngine: AVAudioEngine?
-    private var audioBuffer: AVAudioPCMBuffer?
     private var recordedSamples: [Float] = []
+
+    // Audio level for visualization (0.0 to 1.0)
+    var currentLevel: Float = 0.0
+    var onLevelUpdate: ((Float) -> Void)?
 
     private let sampleRate: Double = 16000 // Whisper expects 16kHz
     private let channelCount: AVAudioChannelCount = 1 // Mono
 
     init() {
-        setupAudioSession()
-    }
-
-    private func setupAudioSession() {
         audioEngine = AVAudioEngine()
     }
 
@@ -27,6 +26,7 @@ class AudioRecorder {
 
     func startRecording() {
         recordedSamples.removeAll()
+        currentLevel = 0.0
 
         guard let audioEngine = audioEngine else { return }
 
@@ -45,7 +45,7 @@ class AudioRecorder {
         }
 
         // Install tap to capture audio
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, from: inputFormat, to: whisperFormat)
         }
 
@@ -62,6 +62,23 @@ class AudioRecorder {
         from inputFormat: AVAudioFormat,
         to outputFormat: AVAudioFormat
     ) {
+        // Calculate audio level from input buffer
+        if let channelData = buffer.floatChannelData?[0] {
+            let frames = Int(buffer.frameLength)
+            var sum: Float = 0
+            for i in 0..<frames {
+                let sample = channelData[i]
+                sum += sample * sample
+            }
+            let rms = sqrt(sum / Float(frames))
+            let level = min(1.0, rms * 5) // Scale up for visibility
+
+            DispatchQueue.main.async { [weak self] in
+                self?.currentLevel = level
+                self?.onLevelUpdate?(level)
+            }
+        }
+
         // Convert to Whisper format if needed
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
             return
@@ -84,7 +101,6 @@ class AudioRecorder {
         }
 
         guard status != .error, error == nil else {
-            print("Conversion error: \(error?.localizedDescription ?? "unknown")")
             return
         }
 
@@ -101,6 +117,7 @@ class AudioRecorder {
     func stopRecording() -> [Float]? {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
+        currentLevel = 0.0
 
         guard !recordedSamples.isEmpty else {
             return nil
