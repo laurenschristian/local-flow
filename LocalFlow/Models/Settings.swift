@@ -1,6 +1,8 @@
 import Foundation
 import ServiceManagement
 
+import SwiftUI
+
 enum WhisperModel: String, CaseIterable, Identifiable {
     case tiny = "ggml-tiny.en.bin"
     case base = "ggml-base.en.bin"
@@ -15,6 +17,33 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .base: return "Base (142MB) - Fast"
         case .small: return "Small (466MB) - Recommended"
         case .medium: return "Medium (1.5GB) - Accurate"
+        }
+    }
+
+    var shortName: String {
+        switch self {
+        case .tiny: return "Tiny"
+        case .base: return "Base"
+        case .small: return "Small"
+        case .medium: return "Medium"
+        }
+    }
+
+    var qualityLabel: String {
+        switch self {
+        case .tiny: return "Basic"
+        case .base: return "Good"
+        case .small: return "Better"
+        case .medium: return "Best"
+        }
+    }
+
+    var qualityColor: Color {
+        switch self {
+        case .tiny: return .orange
+        case .base: return .yellow
+        case .small: return .green
+        case .medium: return .blue
         }
     }
 

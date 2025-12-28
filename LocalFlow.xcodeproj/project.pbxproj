@@ -31,9 +31,11 @@
 		ED8B4ED7B317EAC2F73E6A17 /* TextInserter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C595780951D184E9610FBB /* TextInserter.swift */; };
 		EFA80BFB1E59283EB74E1EB9 /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7422A25CC55177D22981282 /* ModelDownloader.swift */; };
 		F2B0274768F0B351696CE036 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC11B68FE5CE2E3F8CB2EAF /* SettingsView.swift */; };
+		FA92D58360FC8E2E4A7B96AE /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F5077C4D6279B2DB685EDC /* OnboardingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		04F5077C4D6279B2DB685EDC /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		09A35D90C2F8BB2652B1B446 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		0CCAA17F44731FCF77F4790A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0D4963518FED3AC5E1B3E25D /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
@@ -108,6 +110,7 @@
 			isa = PBXGroup;
 			children = (
 				0D4963518FED3AC5E1B3E25D /* MenuBarView.swift */,
+				04F5077C4D6279B2DB685EDC /* OnboardingView.swift */,
 				745F7EE1D382EA1E1BF7E612 /* RecordingOverlay.swift */,
 				9DC11B68FE5CE2E3F8CB2EAF /* SettingsView.swift */,
 			);
@@ -264,6 +267,7 @@
 				8DA344ACD7809FAFD4D568C0 /* LocalFlowApp.swift in Sources */,
 				A6828905AAA24FF3203EEF23 /* MenuBarView.swift in Sources */,
 				EFA80BFB1E59283EB74E1EB9 /* ModelDownloader.swift in Sources */,
+				FA92D58360FC8E2E4A7B96AE /* OnboardingView.swift in Sources */,
 				8A87B389601E5FEF9158F176 /* RecordingOverlay.swift in Sources */,
 				CCD99E3428D44D40DF1201B4 /* Settings.swift in Sources */,
 				F2B0274768F0B351696CE036 /* SettingsView.swift in Sources */,
