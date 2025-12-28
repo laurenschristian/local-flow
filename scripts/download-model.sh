@@ -7,22 +7,20 @@ set -e
 
 MODEL=${1:-small}
 MODELS_DIR="${HOME}/Library/Application Support/LocalFlow/Models"
-
-declare -A MODELS
-MODELS[tiny]="ggml-tiny.en.bin"
-MODELS[base]="ggml-base.en.bin"
-MODELS[small]="ggml-small.en.bin"
-MODELS[medium]="ggml-medium.en.bin"
-
 BASE_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 
-if [[ ! ${MODELS[$MODEL]+_} ]]; then
-    echo "Unknown model: $MODEL"
-    echo "Available models: tiny, base, small, medium"
-    exit 1
-fi
+case "$MODEL" in
+    tiny)   MODEL_FILE="ggml-tiny.en.bin" ;;
+    base)   MODEL_FILE="ggml-base.en.bin" ;;
+    small)  MODEL_FILE="ggml-small.en.bin" ;;
+    medium) MODEL_FILE="ggml-medium.en.bin" ;;
+    *)
+        echo "Unknown model: $MODEL"
+        echo "Available models: tiny, base, small, medium"
+        exit 1
+        ;;
+esac
 
-MODEL_FILE="${MODELS[$MODEL]}"
 MODEL_PATH="$MODELS_DIR/$MODEL_FILE"
 
 # Create models directory
@@ -33,7 +31,7 @@ if [[ -f "$MODEL_PATH" ]]; then
     exit 0
 fi
 
-echo "Downloading $MODEL model..."
+echo "Downloading $MODEL model ($MODEL_FILE)..."
 echo "This may take a few minutes depending on your connection."
 echo ""
 
