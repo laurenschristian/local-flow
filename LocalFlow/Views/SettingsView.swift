@@ -231,7 +231,10 @@ struct SettingsView: View {
     }
 
     private var aboutTab: some View {
-        VStack(spacing: 16) {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+
+        return VStack(spacing: 16) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 64, height: 64)
@@ -239,7 +242,7 @@ struct SettingsView: View {
             Text("LocalFlow")
                 .font(.title)
 
-            Text("Version 0.1.0")
+            Text("Version \(version) (\(build))")
                 .foregroundColor(.secondary)
 
             Text("Local voice dictation powered by Whisper")

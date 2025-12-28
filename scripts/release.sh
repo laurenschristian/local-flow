@@ -51,19 +51,36 @@ info "Build complete"
 # Create DMG
 DMG_NAME="$APP_NAME-v$VERSION-mac-arm64.dmg"
 DMG_PATH="$BUILD_DIR/$DMG_NAME"
-DMG_TEMP="$BUILD_DIR/dmg_temp"
 
 info "Creating DMG..."
-mkdir -p "$DMG_TEMP"
-cp -R "$BUILD_DIR/$APP_NAME.app" "$DMG_TEMP/"
-ln -s /Applications "$DMG_TEMP/Applications"
 
-hdiutil create -volname "$APP_NAME" \
-    -srcfolder "$DMG_TEMP" \
-    -ov -format UDZO \
-    "$DMG_PATH"
-
-rm -rf "$DMG_TEMP"
+# Use create-dmg for a professional DMG with icon
+if command -v create-dmg &> /dev/null; then
+    rm -f "$DMG_PATH"
+    create-dmg \
+        --volname "$APP_NAME" \
+        --volicon "$PROJECT_DIR/LocalFlow/Assets.xcassets/AppIcon.appiconset/icon_512.png" \
+        --window-pos 200 120 \
+        --window-size 600 400 \
+        --icon-size 100 \
+        --icon "$APP_NAME.app" 150 190 \
+        --hide-extension "$APP_NAME.app" \
+        --app-drop-link 450 190 \
+        "$DMG_PATH" \
+        "$BUILD_DIR/$APP_NAME.app" \
+        2>/dev/null || true
+else
+    # Fallback to basic hdiutil
+    DMG_TEMP="$BUILD_DIR/dmg_temp"
+    mkdir -p "$DMG_TEMP"
+    cp -R "$BUILD_DIR/$APP_NAME.app" "$DMG_TEMP/"
+    ln -s /Applications "$DMG_TEMP/Applications"
+    hdiutil create -volname "$APP_NAME" \
+        -srcfolder "$DMG_TEMP" \
+        -ov -format UDZO \
+        "$DMG_PATH"
+    rm -rf "$DMG_TEMP"
+fi
 
 # Get file size
 DMG_SIZE=$(stat -f%z "$DMG_PATH")
