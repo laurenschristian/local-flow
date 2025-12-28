@@ -6,6 +6,8 @@ struct SettingsView: View {
     @State private var downloadProgress: Double = 0
     @State private var isDownloading: Bool = false
     @State private var downloadError: String?
+    @State private var accessibilityGranted = false
+    @State private var microphoneGranted = false
 
     var body: some View {
         TabView {
@@ -40,10 +42,11 @@ struct SettingsView: View {
                 }
         }
         .frame(width: 480, height: 360)
+        .onAppear {
+            accessibilityGranted = AXIsProcessTrusted()
+            microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        }
     }
-
-    @State private var accessibilityGranted = AXIsProcessTrusted()
-    @State private var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
 
     private var permissionsTab: some View {
         Form {
@@ -102,10 +105,6 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
-        .onAppear {
-            accessibilityGranted = AXIsProcessTrusted()
-            microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        }
     }
 
     private var generalTab: some View {

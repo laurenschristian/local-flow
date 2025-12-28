@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1E291C26A6AF62EB186277B3 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 68BB7B6BA5E80AC3571DF2E6 /* ApplicationServices.framework */; };
 		2BF0D00DB0347C4BF1701729 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4926CA88782E797391AA3917 /* AppDelegate.swift */; };
+		4AD00388C1E49D9C4B14A38C /* stop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 928A4691141858D14DA0690F /* stop.wav */; };
 		4DB5504ECD033C7275FB00E0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5E291ECD81FBAA816F8D5358 /* Assets.xcassets */; };
 		5BAEE31C23BA6DDC868EE019 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EBA3FD33E3056EFE232F9D08 /* Accelerate.framework */; };
 		6F7651ABEAB6C37D2752F4D8 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A35D90C2F8BB2652B1B446 /* HotkeyManager.swift */; };
@@ -17,6 +18,7 @@
 		8A87B389601E5FEF9158F176 /* RecordingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745F7EE1D382EA1E1BF7E612 /* RecordingOverlay.swift */; };
 		8DA344ACD7809FAFD4D568C0 /* LocalFlowApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7DE224E088ADB54CAC484FA /* LocalFlowApp.swift */; };
 		A6828905AAA24FF3203EEF23 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D4963518FED3AC5E1B3E25D /* MenuBarView.swift */; };
+		ABEDBF61098D5D7C74671440 /* start.wav in Resources */ = {isa = PBXBuildFile; fileRef = EC4F33B6BDBC286655604B22 /* start.wav */; };
 		B23739ACF85A23D02558D3EA /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F3B2253C0690986F460341 /* Carbon.framework */; };
 		B2E75289159A740F29C1F6F5 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6F399E4E78A7E6A061647A /* AudioRecorder.swift */; };
 		BD8F1349EBBDC28873684DD3 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 387688B31E970472350235F8 /* MetalKit.framework */; };
@@ -47,11 +49,13 @@
 		745F7EE1D382EA1E1BF7E612 /* RecordingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlay.swift; sourceTree = "<group>"; };
 		8040A37B08BE8E069A106059 /* LocalFlow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalFlow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8278B549A5B6B2B152101E7E /* LocalFlow.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LocalFlow.entitlements; sourceTree = "<group>"; };
+		928A4691141858D14DA0690F /* stop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = stop.wav; sourceTree = "<group>"; };
 		9DC11B68FE5CE2E3F8CB2EAF /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A7DE224E088ADB54CAC484FA /* LocalFlowApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFlowApp.swift; sourceTree = "<group>"; };
 		D46592E2D9C2022A5455AD14 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
 		E5F3B2253C0690986F460341 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
 		EBA3FD33E3056EFE232F9D08 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		EC4F33B6BDBC286655604B22 /* start.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = start.wav; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -144,6 +148,8 @@
 		70716601B7E67B354A77D3B6 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				EC4F33B6BDBC286655604B22 /* start.wav */,
+				928A4691141858D14DA0690F /* stop.wav */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -227,6 +233,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				4DB5504ECD033C7275FB00E0 /* Assets.xcassets in Resources */,
+				ABEDBF61098D5D7C74671440 /* start.wav in Resources */,
+				4AD00388C1E49D9C4B14A38C /* stop.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

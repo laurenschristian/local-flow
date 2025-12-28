@@ -38,8 +38,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupSounds() {
-        startSound = NSSound(named: "Tink")
-        stopSound = NSSound(named: "Pop")
+        if let startURL = Bundle.main.url(forResource: "start", withExtension: "wav") {
+            startSound = NSSound(contentsOf: startURL, byReference: true)
+        }
+        if let stopURL = Bundle.main.url(forResource: "stop", withExtension: "wav") {
+            stopSound = NSSound(contentsOf: stopURL, byReference: true)
+        }
     }
 
     private func setupMenuBar() {
