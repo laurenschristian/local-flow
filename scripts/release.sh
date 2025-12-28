@@ -85,15 +85,12 @@ fi
 # Set custom icon on DMG file
 info "Setting DMG icon..."
 ICON_PNG="$PROJECT_DIR/LocalFlow/Assets.xcassets/AppIcon.appiconset/icon_512.png"
-if [ -f "$ICON_PNG" ]; then
+if [ -f "$ICON_PNG" ] && command -v fileicon &> /dev/null; then
     mkdir -p /tmp/icon.iconset
     sips -z 512 512 "$ICON_PNG" --out /tmp/icon.iconset/icon_512x512.png 2>/dev/null
     iconutil -c icns /tmp/icon.iconset -o /tmp/LocalFlow.icns 2>/dev/null
-    sips -i /tmp/LocalFlow.icns 2>/dev/null
-    DeRez -only icns /tmp/LocalFlow.icns > /tmp/icns.rsrc 2>/dev/null
-    Rez -append /tmp/icns.rsrc -o "$DMG_PATH" 2>/dev/null
-    SetFile -a C "$DMG_PATH" 2>/dev/null
-    rm -rf /tmp/icon.iconset /tmp/LocalFlow.icns /tmp/icns.rsrc
+    fileicon set "$DMG_PATH" /tmp/LocalFlow.icns 2>/dev/null
+    rm -rf /tmp/icon.iconset /tmp/LocalFlow.icns
 fi
 
 # Get file size
