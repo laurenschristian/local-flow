@@ -119,6 +119,13 @@ Access settings via the menu bar icon.
 
 **Recommendation**: Start with `small` for the best balance of speed and accuracy.
 
+## Documentation
+
+- [Installation Guide](docs/INSTALL.md) — Build from source
+- [Model Comparison](docs/MODELS.md) — Choose the right model
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — Common issues
+- [Privacy Policy](docs/PRIVACY.md) — How your data is handled
+
 ## Privacy
 
 LocalFlow is designed with privacy as a core principle:
@@ -128,6 +135,8 @@ LocalFlow is designed with privacy as a core principle:
 - No data is ever sent to external servers
 - No analytics or telemetry
 - Update checks only fetch a small XML file from GitHub
+
+See our full [Privacy Policy](docs/PRIVACY.md).
 
 ## License
 

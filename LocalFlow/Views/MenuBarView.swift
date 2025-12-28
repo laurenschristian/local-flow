@@ -19,6 +19,21 @@ struct MenuBarView: View {
                 Spacer()
             }
 
+            // Model indicator
+            HStack(spacing: 6) {
+                Image(systemName: "cpu")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(settings.selectedModel.shortName)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("•")
+                    .foregroundColor(.secondary)
+                Text(settings.selectedModel.qualityLabel)
+                    .font(.caption)
+                    .foregroundColor(settings.selectedModel.qualityColor)
+            }
+
             Divider()
 
             // Instructions

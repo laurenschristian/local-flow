@@ -18,14 +18,61 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @ObservedObject private var appState = AppState.shared
     private let settings = Settings.shared
 
+    private var onboardingWindow: NSWindow?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupServices()
         setupSounds()
         setupMenuBar()
-        setupHotkey()
-        checkAndLoadModel()
+
+        if shouldShowOnboarding() {
+            showOnboarding()
+        } else {
+            completeStartup()
+        }
 
         print("[LocalFlow] App launched - double-tap \(settings.triggerKey.displayName) to record")
+    }
+
+    private func shouldShowOnboarding() -> Bool {
+        let completed = UserDefaults.standard.bool(forKey: "onboardingCompleted")
+        if !completed { return true }
+
+        // Also show if permissions were revoked (e.g., after update)
+        let hasAccessibility = AXIsProcessTrusted()
+        let hasMicrophone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        let hasModel = settings.hasAnyModel()
+
+        if !hasAccessibility || !hasMicrophone {
+            // Permissions revoked - reset onboarding flag to show setup again
+            UserDefaults.standard.set(false, forKey: "onboardingCompleted")
+            return true
+        }
+
+        return !hasModel
+    }
+
+    private func showOnboarding() {
+        let onboardingView = OnboardingView {
+            self.onboardingWindow?.close()
+            self.onboardingWindow = nil
+            self.completeStartup()
+        }
+
+        let hostingController = NSHostingController(rootView: onboardingView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Welcome to LocalFlow"
+        window.styleMask = [.titled, .closable]
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        onboardingWindow = window
+    }
+
+    private func completeStartup() {
+        setupHotkey()
+        checkAndLoadModel()
     }
 
     private func checkAndLoadModel() {
@@ -65,7 +112,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     settings.selectedModel = defaultModel
                     loadModel()
                 } else {
-                    AppState.shared.status = .error("Failed to download model")
+                    AppState.shared.status = .error(.modelDownloadFailed)
                 }
             }
         }
@@ -137,7 +184,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     AppState.shared.status = .idle
                 } else {
                     print("[LocalFlow] Failed to load model")
-                    AppState.shared.status = .error("Failed to load model")
+                    AppState.shared.status = .error(.modelLoadFailed)
                 }
             }
         }
@@ -188,7 +235,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard let audioData = audioRecorder.stopRecording() else {
             print("[LocalFlow] No audio data recorded")
-            AppState.shared.status = .error("No audio recorded")
+            AppState.shared.status = .error(.noAudioRecorded)
             RecordingOverlayController.shared.hide()
             return
         }
@@ -216,7 +263,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     AppState.shared.status = .idle
                 case .failure(let error):
                     print("[LocalFlow] Transcription error: \(error)")
-                    AppState.shared.status = .error(error.localizedDescription)
+                    AppState.shared.status = .error(.transcriptionFailed)
                 }
             }
         }
