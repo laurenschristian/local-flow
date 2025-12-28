@@ -34,6 +34,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("[LocalFlow] App launched - double-tap \(settings.triggerKey.displayName) to record")
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Clean up whisper context before exit to prevent Metal crash
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            await whisperService.unloadModel()
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 2.0)
+    }
+
     private func shouldShowOnboarding() -> Bool {
         let completed = UserDefaults.standard.bool(forKey: "onboardingCompleted")
         if !completed { return true }
@@ -53,10 +63,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showOnboarding() {
-        let onboardingView = OnboardingView {
-            self.onboardingWindow?.close()
-            self.onboardingWindow = nil
-            self.completeStartup()
+        let onboardingView = OnboardingView { [weak self] in
+            // Delay close to avoid constraint update race
+            DispatchQueue.main.async {
+                self?.onboardingWindow?.close()
+                self?.onboardingWindow = nil
+                self?.completeStartup()
+            }
         }
 
         let hostingController = NSHostingController(rootView: onboardingView)
@@ -191,12 +204,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func togglePopover() {
-        guard let button = statusItem.button else { return }
+        guard statusItem.button != nil else { return }
 
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // Ensure we're not in middle of a layout pass
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let button = self.statusItem.button else { return }
+                self.popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            }
         }
     }
 
