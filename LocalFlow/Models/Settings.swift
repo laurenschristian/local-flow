@@ -154,6 +154,14 @@ class Settings: ObservableObject {
         return FileManager.default.fileExists(atPath: path)
     }
 
+    func hasAnyModel() -> Bool {
+        WhisperModel.allCases.contains { isModelDownloaded($0) }
+    }
+
+    func firstAvailableModel() -> WhisperModel? {
+        WhisperModel.allCases.first { isModelDownloaded($0) }
+    }
+
     func addToHistory(_ text: String) {
         let entry = TranscriptionEntry(text: text, timestamp: Date())
         transcriptionHistory.insert(entry, at: 0)

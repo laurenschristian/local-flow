@@ -29,6 +29,7 @@
 		E179460DDCDFA946AD6CD71C /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30477527F72B0990A3024AAD /* Metal.framework */; };
 		E910710C55211C58CB9381D5 /* CoreML.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D46592E2D9C2022A5455AD14 /* CoreML.framework */; };
 		ED8B4ED7B317EAC2F73E6A17 /* TextInserter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C595780951D184E9610FBB /* TextInserter.swift */; };
+		EFA80BFB1E59283EB74E1EB9 /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7422A25CC55177D22981282 /* ModelDownloader.swift */; };
 		F2B0274768F0B351696CE036 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC11B68FE5CE2E3F8CB2EAF /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -54,6 +55,7 @@
 		8278B549A5B6B2B152101E7E /* LocalFlow.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LocalFlow.entitlements; sourceTree = "<group>"; };
 		928A4691141858D14DA0690F /* stop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = stop.wav; sourceTree = "<group>"; };
 		9DC11B68FE5CE2E3F8CB2EAF /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A7422A25CC55177D22981282 /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
 		A7DE224E088ADB54CAC484FA /* LocalFlowApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFlowApp.swift; sourceTree = "<group>"; };
 		D46592E2D9C2022A5455AD14 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
 		E5F3B2253C0690986F460341 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
@@ -94,6 +96,7 @@
 			children = (
 				2A6F399E4E78A7E6A061647A /* AudioRecorder.swift */,
 				09A35D90C2F8BB2652B1B446 /* HotkeyManager.swift */,
+				A7422A25CC55177D22981282 /* ModelDownloader.swift */,
 				34C595780951D184E9610FBB /* TextInserter.swift */,
 				17E7F06595559294218703E5 /* UpdateController.swift */,
 				73C2F2ACA627850ED57A544E /* WhisperService.swift */,
@@ -260,6 +263,7 @@
 				6F7651ABEAB6C37D2752F4D8 /* HotkeyManager.swift in Sources */,
 				8DA344ACD7809FAFD4D568C0 /* LocalFlowApp.swift in Sources */,
 				A6828905AAA24FF3203EEF23 /* MenuBarView.swift in Sources */,
+				EFA80BFB1E59283EB74E1EB9 /* ModelDownloader.swift in Sources */,
 				8A87B389601E5FEF9158F176 /* RecordingOverlay.swift in Sources */,
 				CCD99E3428D44D40DF1201B4 /* Settings.swift in Sources */,
 				F2B0274768F0B351696CE036 /* SettingsView.swift in Sources */,

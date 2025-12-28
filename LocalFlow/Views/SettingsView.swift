@@ -3,9 +3,7 @@ import AVFoundation
 
 struct SettingsView: View {
     @ObservedObject private var settings = Settings.shared
-    @State private var downloadProgress: Double = 0
-    @State private var isDownloading: Bool = false
-    @State private var downloadError: String?
+    @ObservedObject private var modelDownloader = ModelDownloader.shared
     @State private var accessibilityGranted = false
     @State private var microphoneGranted = false
 
@@ -186,13 +184,13 @@ struct SettingsView: View {
                     ModelRow(
                         model: model,
                         isDownloaded: settings.isModelDownloaded(model),
-                        isDownloading: isDownloading && settings.selectedModel == model,
-                        progress: downloadProgress,
+                        isDownloading: modelDownloader.isDownloading && modelDownloader.currentModel == model,
+                        progress: modelDownloader.progress,
                         onDownload: { downloadModel(model) }
                     )
                 }
 
-                if let error = downloadError {
+                if let error = modelDownloader.error {
                     Text(error)
                         .foregroundColor(.red)
                         .font(.caption)
@@ -258,59 +256,10 @@ struct SettingsView: View {
     }
 
     private func downloadModel(_ model: WhisperModel) {
-        guard !isDownloading else { return }
-
-        isDownloading = true
-        downloadProgress = 0
-        downloadError = nil
+        guard !modelDownloader.isDownloading else { return }
 
         Task {
-            do {
-                let destination = settings.modelsDirectory.appendingPathComponent(model.rawValue)
-                FileManager.default.createFile(atPath: destination.path, contents: nil)
-
-                let (asyncBytes, response) = try await URLSession.shared.bytes(from: model.downloadURL)
-
-                let totalSize = response.expectedContentLength
-                var downloadedSize: Int64 = 0
-
-                let fileHandle = try FileHandle(forWritingTo: destination)
-                defer { try? fileHandle.close() }
-
-                var buffer = [UInt8]()
-                buffer.reserveCapacity(65536)
-
-                for try await byte in asyncBytes {
-                    buffer.append(byte)
-                    downloadedSize += 1
-
-                    if buffer.count >= 65536 {
-                        try fileHandle.write(contentsOf: buffer)
-                        buffer.removeAll(keepingCapacity: true)
-
-                        if totalSize > 0 {
-                            let progress = Double(downloadedSize) / Double(totalSize)
-                            await MainActor.run {
-                                downloadProgress = progress
-                            }
-                        }
-                    }
-                }
-
-                if !buffer.isEmpty {
-                    try fileHandle.write(contentsOf: buffer)
-                }
-
-                await MainActor.run {
-                    isDownloading = false
-                    downloadProgress = 1.0
-                }
-            } catch {
-                await MainActor.run {
-                    isDownloading = false
-                    downloadError = error.localizedDescription
-                }
-            }
+            await modelDownloader.downloadModel(model)
         }
     }
 
