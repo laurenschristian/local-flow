@@ -20,7 +20,7 @@ LocalFlow is a local alternative to Wispr Flow, providing hold-to-talk voice dic
 
 | Feature | Description |
 |---------|-------------|
-| Hold-to-talk | Hold Fn key (or configurable hotkey) to record, release to transcribe |
+| Double-tap to talk | Double-tap Option key to start recording, hold and speak, release to transcribe |
 | Local Whisper | whisper.cpp with Metal/CoreML acceleration for Apple Silicon |
 | Text insertion | Automatically type transcribed text at cursor position |
 | Menu bar app | Lightweight presence with status indicator |
