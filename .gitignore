@@ -1,4 +1,5 @@
 # Xcode
+*.xcodeproj/
 build/
 DerivedData/
 *.xcuserstate

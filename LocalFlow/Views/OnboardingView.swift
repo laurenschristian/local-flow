@@ -15,25 +15,17 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Progress indicator
-            HStack(spacing: 8) {
-                ForEach(0..<steps.count, id: \.self) { index in
-                    Circle()
-                        .fill(index <= currentStep ? Color.accentColor : Color.gray.opacity(0.3))
-                        .frame(width: 8, height: 8)
+            // Content - no TabView to avoid double indicators
+            Group {
+                switch currentStep {
+                case 0: welcomeStep
+                case 1: accessibilityStep
+                case 2: microphoneStep
+                case 3: modelStep
+                case 4: readyStep
+                default: welcomeStep
                 }
             }
-            .padding(.top, 20)
-
-            // Content
-            TabView(selection: $currentStep) {
-                welcomeStep.tag(0)
-                accessibilityStep.tag(1)
-                microphoneStep.tag(2)
-                modelStep.tag(3)
-                readyStep.tag(4)
-            }
-            .tabViewStyle(.automatic)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 500, height: 400)
