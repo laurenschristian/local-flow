@@ -9,7 +9,6 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Status
             HStack {
                 Circle()
                     .fill(appState.status.color)
@@ -19,7 +18,6 @@ struct MenuBarView: View {
                 Spacer()
             }
 
-            // Model indicator
             HStack(spacing: 6) {
                 Image(systemName: "cpu")
                     .font(.caption)
@@ -36,7 +34,6 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Instructions
             VStack(alignment: .leading, spacing: 4) {
                 Text("Double-tap \(settings.triggerKey.displayName) to record")
                     .font(.caption)
@@ -46,22 +43,8 @@ struct MenuBarView: View {
                     .foregroundColor(.secondary)
             }
 
-            // Last transcription
-            if !appState.lastTranscription.isEmpty {
-                Divider()
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Last:")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(appState.lastTranscription)
-                        .font(.caption)
-                        .lineLimit(3)
-                }
-            }
-
             Divider()
 
-            // Actions
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Button("Settings...") {
@@ -85,12 +68,9 @@ struct MenuBarView: View {
             }
         }
         .padding()
-        .frame(width: 280)
-        .onAppear {
-            appState.checkPermissions()
-        }
+        .frame(width: 280, height: 180) // Fixed size prevents constraint recalc
+        .transaction { $0.animation = nil } // Disable animations
     }
-
 }
 
 #Preview {

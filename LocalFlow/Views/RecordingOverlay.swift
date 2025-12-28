@@ -49,6 +49,8 @@ class RecordingOverlayController {
 
         let overlayView = RecordingOverlayView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: overlayView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 160, height: 52)
+        hostingView.translatesAutoresizingMaskIntoConstraints = true
         self.hostingView = hostingView
 
         let window = NSWindow(
@@ -58,7 +60,11 @@ class RecordingOverlayController {
             defer: false
         )
 
-        window.contentView = hostingView
+        // Use a container view to prevent constraint issues
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 160, height: 52))
+        containerView.wantsLayer = true
+        containerView.addSubview(hostingView)
+        window.contentView = containerView
         window.isOpaque = false
         window.backgroundColor = .clear
         window.level = .floating
@@ -122,9 +128,6 @@ struct RecordingOverlayView: View {
                 .shadow(color: brandColor.opacity(0.5), radius: 16, x: 0, y: 8)
         )
         .opacity(viewModel.isVisible ? 1 : 0)
-        .scaleEffect(viewModel.isVisible ? 1 : 0.8)
-        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: viewModel.isVisible)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.status)
     }
 }
 

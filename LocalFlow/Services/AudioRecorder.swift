@@ -3,14 +3,14 @@ import Foundation
 
 class AudioRecorder {
     private var audioEngine: AVAudioEngine?
+    private var audioConverter: AVAudioConverter?
     private var recordedSamples: [Float] = []
 
-    // Audio level for visualization (0.0 to 1.0)
     var currentLevel: Float = 0.0
     var onLevelUpdate: ((Float) -> Void)?
 
     private let sampleRate: Double = 16000 // Whisper expects 16kHz
-    private let channelCount: AVAudioChannelCount = 1 // Mono
+    private let channelCount: AVAudioChannelCount = 1
 
     init() {
         audioEngine = AVAudioEngine()
@@ -26,6 +26,7 @@ class AudioRecorder {
 
     func startRecording() {
         recordedSamples.removeAll()
+        recordedSamples.reserveCapacity(16000 * 30) // Pre-allocate for ~30 seconds
         currentLevel = 0.0
 
         guard let audioEngine = audioEngine else { return }
@@ -33,7 +34,6 @@ class AudioRecorder {
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
-        // Create format for Whisper: 16kHz mono float32
         guard let whisperFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: sampleRate,
@@ -44,9 +44,11 @@ class AudioRecorder {
             return
         }
 
-        // Install tap to capture audio
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.processAudioBuffer(buffer, from: inputFormat, to: whisperFormat)
+        // Create converter once, reuse for all buffers
+        audioConverter = AVAudioConverter(from: inputFormat, to: whisperFormat)
+
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            self?.processAudioBuffer(buffer)
         }
 
         do {
@@ -57,21 +59,18 @@ class AudioRecorder {
         }
     }
 
-    private func processAudioBuffer(
-        _ buffer: AVAudioPCMBuffer,
-        from inputFormat: AVAudioFormat,
-        to outputFormat: AVAudioFormat
-    ) {
-        // Calculate audio level from input buffer
+    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+        // Calculate audio level using Accelerate framework would be faster,
+        // but this is simple and runs on audio thread
         if let channelData = buffer.floatChannelData?[0] {
             let frames = Int(buffer.frameLength)
             var sum: Float = 0
-            for i in 0..<frames {
+            for i in stride(from: 0, to: frames, by: 4) { // Sample every 4th frame
                 let sample = channelData[i]
                 sum += sample * sample
             }
-            let rms = sqrt(sum / Float(frames))
-            let level = min(1.0, rms * 5) // Scale up for visibility
+            let rms = sqrt(sum / Float(frames / 4))
+            let level = min(1.0, rms * 5)
 
             DispatchQueue.main.async { [weak self] in
                 self?.currentLevel = level
@@ -79,44 +78,34 @@ class AudioRecorder {
             }
         }
 
-        // Convert to Whisper format if needed
-        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
-            return
-        }
+        guard let converter = audioConverter,
+              let outputFormat = converter.outputFormat as AVAudioFormat? else { return }
 
-        let ratio = outputFormat.sampleRate / inputFormat.sampleRate
-        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+        let ratio = outputFormat.sampleRate / converter.inputFormat.sampleRate
+        let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 1)
 
         guard let convertedBuffer = AVAudioPCMBuffer(
             pcmFormat: outputFormat,
             frameCapacity: outputFrameCapacity
-        ) else {
-            return
-        }
+        ) else { return }
 
         var error: NSError?
-        let status = converter.convert(to: convertedBuffer, error: &error) { inNumPackets, outStatus in
+        let status = converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
             outStatus.pointee = .haveData
             return buffer
         }
 
-        guard status != .error, error == nil else {
-            return
-        }
+        guard status != .error, error == nil,
+              let channelData = convertedBuffer.floatChannelData?[0] else { return }
 
-        // Append samples
-        if let channelData = convertedBuffer.floatChannelData?[0] {
-            let samples = Array(UnsafeBufferPointer(
-                start: channelData,
-                count: Int(convertedBuffer.frameLength)
-            ))
-            recordedSamples.append(contentsOf: samples)
-        }
+        let frameCount = Int(convertedBuffer.frameLength)
+        recordedSamples.append(contentsOf: UnsafeBufferPointer(start: channelData, count: frameCount))
     }
 
     func stopRecording() -> [Float]? {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
+        audioConverter = nil
         currentLevel = 0.0
 
         guard !recordedSamples.isEmpty else {
@@ -124,7 +113,7 @@ class AudioRecorder {
         }
 
         let samples = recordedSamples
-        recordedSamples.removeAll()
+        recordedSamples.removeAll(keepingCapacity: false) // Release memory
         return samples
     }
 }

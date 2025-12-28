@@ -40,11 +40,17 @@ xcodebuild -project LocalFlow.xcodeproj \
     -arch arm64 \
     build \
     CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
+    CODE_SIGN_IDENTITY="-" \
+    CODE_SIGNING_REQUIRED=NO \
     2>&1 | grep -E "(error:|warning:|BUILD SUCCEEDED)" || true
 
 if [ ! -d "$BUILD_DIR/$APP_NAME.app" ]; then
     error "Build failed - app not found"
 fi
+
+# Sign with Apple Development certificate
+info "Signing app..."
+codesign --force --deep --sign "Apple Development" "$BUILD_DIR/$APP_NAME.app"
 
 info "Build complete"
 
