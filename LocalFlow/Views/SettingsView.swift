@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct SettingsView: View {
     @ObservedObject private var settings = Settings.shared
@@ -13,9 +14,19 @@ struct SettingsView: View {
                     Label("General", systemImage: "gear")
                 }
 
+            hotkeyTab
+                .tabItem {
+                    Label("Hotkey", systemImage: "command")
+                }
+
             modelTab
                 .tabItem {
                     Label("Model", systemImage: "cpu")
+                }
+
+            historyTab
+                .tabItem {
+                    Label("History", systemImage: "clock")
                 }
 
             aboutTab
@@ -23,22 +34,26 @@ struct SettingsView: View {
                     Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 450, height: 300)
+        .frame(width: 480, height: 360)
     }
 
     private var generalTab: some View {
         Form {
-            Section {
-                Toggle("Launch at login", isOn: $settings.launchAtLogin)
+            Section("Transcription") {
+                Toggle("Auto-punctuation", isOn: $settings.punctuationMode)
+                    .help("Automatically add periods, commas, and other punctuation")
 
-                LabeledContent("Double-tap speed") {
-                    Slider(value: $settings.doubleTapInterval, in: 0.2...0.5, step: 0.05) {
-                        Text("Interval")
-                    }
-                    Text("\(Int(settings.doubleTapInterval * 1000))ms")
-                        .monospacedDigit()
-                        .frame(width: 50)
-                }
+                Toggle("Clipboard only", isOn: $settings.clipboardMode)
+                    .help("Copy to clipboard without auto-pasting")
+            }
+
+            Section("Feedback") {
+                Toggle("Sound effects", isOn: $settings.soundFeedback)
+                    .help("Play sounds when recording starts and stops")
+            }
+
+            Section("Startup") {
+                Toggle("Launch at login", isOn: $settings.launchAtLogin)
             }
 
             Section("Permissions") {
@@ -53,6 +68,40 @@ struct SettingsView: View {
                     isGranted: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
                     action: openMicrophoneSettings
                 )
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    private var hotkeyTab: some View {
+        Form {
+            Section("Trigger Key") {
+                Picker("Activation key", selection: $settings.triggerKey) {
+                    ForEach(TriggerKey.allCases) { key in
+                        Text(key.displayName).tag(key)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+
+                Text("Double-tap and hold the selected key to start recording")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section("Timing") {
+                LabeledContent("Double-tap speed") {
+                    Slider(value: $settings.doubleTapInterval, in: 0.2...0.5, step: 0.05) {
+                        Text("Interval")
+                    }
+                    Text("\(Int(settings.doubleTapInterval * 1000))ms")
+                        .monospacedDigit()
+                        .frame(width: 50)
+                }
+
+                Text("Lower values require faster double-taps")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -98,11 +147,40 @@ struct SettingsView: View {
         .padding()
     }
 
+    private var historyTab: some View {
+        VStack {
+            if settings.transcriptionHistory.isEmpty {
+                ContentUnavailableView(
+                    "No History",
+                    systemImage: "clock",
+                    description: Text("Your recent transcriptions will appear here")
+                )
+            } else {
+                List {
+                    ForEach(settings.transcriptionHistory) { entry in
+                        HistoryRow(entry: entry)
+                    }
+                }
+                .listStyle(.inset)
+
+                HStack {
+                    Spacer()
+                    Button("Clear History") {
+                        settings.clearHistory()
+                    }
+                    .buttonStyle(.link)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
     private var aboutTab: some View {
         VStack(spacing: 16) {
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 64))
-                .foregroundColor(.accentColor)
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 64, height: 64)
 
             Text("LocalFlow")
                 .font(.title)
@@ -116,7 +194,7 @@ struct SettingsView: View {
 
             Spacer()
 
-            Link("View on GitHub", destination: URL(string: "https://github.com/laurenschristian/local-wisper")!)
+            Link("View on GitHub", destination: URL(string: "https://github.com/laurenschristian/local-flow")!)
                 .font(.caption)
         }
         .padding()
@@ -133,6 +211,7 @@ struct SettingsView: View {
         Task {
             do {
                 let destination = settings.modelsDirectory.appendingPathComponent(model.rawValue)
+                FileManager.default.createFile(atPath: destination.path, contents: nil)
 
                 let (asyncBytes, response) = try await URLSession.shared.bytes(from: model.downloadURL)
 
@@ -142,19 +221,28 @@ struct SettingsView: View {
                 let fileHandle = try FileHandle(forWritingTo: destination)
                 defer { try? fileHandle.close() }
 
-                // Create empty file first
-                FileManager.default.createFile(atPath: destination.path, contents: nil)
+                var buffer = [UInt8]()
+                buffer.reserveCapacity(65536)
 
                 for try await byte in asyncBytes {
-                    try fileHandle.write(contentsOf: [byte])
+                    buffer.append(byte)
                     downloadedSize += 1
 
-                    if totalSize > 0 {
-                        let progress = Double(downloadedSize) / Double(totalSize)
-                        await MainActor.run {
-                            downloadProgress = progress
+                    if buffer.count >= 65536 {
+                        try fileHandle.write(contentsOf: buffer)
+                        buffer.removeAll(keepingCapacity: true)
+
+                        if totalSize > 0 {
+                            let progress = Double(downloadedSize) / Double(totalSize)
+                            await MainActor.run {
+                                downloadProgress = progress
+                            }
                         }
                     }
+                }
+
+                if !buffer.isEmpty {
+                    try fileHandle.write(contentsOf: buffer)
                 }
 
                 await MainActor.run {
@@ -242,7 +330,27 @@ struct ModelRow: View {
     }
 }
 
-import AVFoundation
+struct HistoryRow: View {
+    let entry: TranscriptionEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(entry.text)
+                .lineLimit(2)
+
+            Text(entry.timestamp, style: .relative)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 2)
+        .contextMenu {
+            Button("Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(entry.text, forType: .string)
+            }
+        }
+    }
+}
 
 #Preview {
     SettingsView()
