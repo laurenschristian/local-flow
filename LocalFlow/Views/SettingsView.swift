@@ -9,6 +9,11 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
+            permissionsTab
+                .tabItem {
+                    Label("Permissions", systemImage: "lock.shield")
+                }
+
             generalTab
                 .tabItem {
                     Label("General", systemImage: "gear")
@@ -37,6 +42,72 @@ struct SettingsView: View {
         .frame(width: 480, height: 360)
     }
 
+    @State private var accessibilityGranted = AXIsProcessTrusted()
+    @State private var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+
+    private var permissionsTab: some View {
+        Form {
+            Section {
+                Text("LocalFlow requires these permissions to function properly.")
+                    .font(.callout)
+                    .foregroundColor(.secondary)
+            }
+
+            Section("Required Permissions") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Accessibility")
+                            .font(.headline)
+                        Text("Detect hotkey and insert text into apps")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    if accessibilityGranted {
+                        Label("Granted", systemImage: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    } else {
+                        Button("Grant Access") {
+                            openAccessibilitySettings()
+                        }
+                    }
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Microphone")
+                            .font(.headline)
+                        Text("Record your voice for transcription")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    if microphoneGranted {
+                        Label("Granted", systemImage: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    } else {
+                        Button("Grant Access") {
+                            openMicrophoneSettings()
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Button("Refresh Status") {
+                    accessibilityGranted = AXIsProcessTrusted()
+                    microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .onAppear {
+            accessibilityGranted = AXIsProcessTrusted()
+            microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        }
+    }
+
     private var generalTab: some View {
         Form {
             Section("Transcription") {
@@ -54,20 +125,6 @@ struct SettingsView: View {
 
             Section("Startup") {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
-            }
-
-            Section("Permissions") {
-                PermissionRow(
-                    title: "Accessibility",
-                    isGranted: AXIsProcessTrusted(),
-                    action: openAccessibilitySettings
-                )
-
-                PermissionRow(
-                    title: "Microphone",
-                    isGranted: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
-                    action: openMicrophoneSettings
-                )
             }
         }
         .formStyle(.grouped)
@@ -266,28 +323,6 @@ struct SettingsView: View {
     private func openMicrophoneSettings() {
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
         NSWorkspace.shared.open(url)
-    }
-}
-
-struct PermissionRow: View {
-    let title: String
-    let isGranted: Bool
-    let action: () -> Void
-
-    var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            if isGranted {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-            } else {
-                Button("Grant Access") {
-                    action()
-                }
-                .buttonStyle(.link)
-            }
-        }
     }
 }
 

@@ -21,7 +21,7 @@ struct MenuBarView: View {
 
             // Instructions
             VStack(alignment: .leading, spacing: 4) {
-                Text("Double-tap Option key to record")
+                Text("Double-tap \(settings.triggerKey.displayName) to record")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 Text("Hold to continue, release to transcribe")
@@ -47,6 +47,7 @@ struct MenuBarView: View {
             // Actions
             HStack {
                 Button("Settings...") {
+                    NSApp.activate(ignoringOtherApps: true)
                     openSettings()
                 }
                 .buttonStyle(.link)
