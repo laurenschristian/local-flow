@@ -1,8 +1,10 @@
 import SwiftUI
+import Sparkle
 
 struct MenuBarView: View {
     @ObservedObject private var appState = AppState.shared
     @ObservedObject private var settings = Settings.shared
+    @ObservedObject private var updateController = UpdateController.shared
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -45,17 +47,24 @@ struct MenuBarView: View {
             Divider()
 
             // Actions
-            HStack {
-                Button("Settings...") {
-                    NSApp.activate(ignoringOtherApps: true)
-                    openSettings()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Button("Settings...") {
+                        NSApp.activate(ignoringOtherApps: true)
+                        openSettings()
+                    }
+                    .buttonStyle(.link)
+
+                    Spacer()
+
+                    Button("Quit") {
+                        NSApplication.shared.terminate(nil)
+                    }
+                    .buttonStyle(.link)
                 }
-                .buttonStyle(.link)
 
-                Spacer()
-
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
+                Button("Check for Updates...") {
+                    updateController.checkForUpdates()
                 }
                 .buttonStyle(.link)
             }

@@ -61,3 +61,4 @@ tmp/
 
 # Internal specs
 SPEC.md
+build/
