@@ -7,26 +7,29 @@ class HotkeyManager {
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var lastOptionPressTime: Date?
+    private var lastKeyPressTime: Date?
     private var isHolding: Bool = false
+    private var triggerKeyObserver: NSObjectProtocol?
 
-    private let doubleTapThreshold: TimeInterval = 0.4 // Increased for easier detection
+    private var doubleTapThreshold: TimeInterval {
+        Settings.shared.doubleTapInterval
+    }
+
+    private var currentTriggerKey: TriggerKey {
+        Settings.shared.triggerKey
+    }
 
     func startMonitoring() {
-        // Check accessibility permissions silently - NO prompt
         let trusted = AXIsProcessTrusted()
-
         print("[HotkeyManager] Accessibility trusted: \(trusted)")
 
         if !trusted {
             print("[HotkeyManager] WARNING: Accessibility permission NOT granted - hotkeys won't work!")
-            // Don't return - still try to create event tap, it just won't work
         }
 
-        // Create event tap for modifier key changes
         let eventMask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
 
-        print("[HotkeyManager] Creating event tap...")
+        print("[HotkeyManager] Creating event tap for \(currentTriggerKey.displayName)...")
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -41,7 +44,6 @@ class HotkeyManager {
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
             print("[HotkeyManager] ERROR: Failed to create event tap!")
-            print("[HotkeyManager] This usually means accessibility permission is not properly granted.")
             return
         }
 
@@ -53,8 +55,15 @@ class HotkeyManager {
         if let source = runLoopSource {
             CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
-            print("[HotkeyManager] Event tap enabled and added to run loop")
-            print("[HotkeyManager] Ready! Double-tap Option key to start recording")
+            print("[HotkeyManager] Ready! Double-tap \(currentTriggerKey.displayName) to start recording")
+        }
+
+        triggerKeyObserver = NotificationCenter.default.addObserver(
+            forName: .triggerKeyChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("[HotkeyManager] Trigger key changed to \(self?.currentTriggerKey.displayName ?? "unknown")")
         }
     }
 
@@ -67,8 +76,13 @@ class HotkeyManager {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
 
+        if let observer = triggerKeyObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
         eventTap = nil
         runLoopSource = nil
+        triggerKeyObserver = nil
         print("[HotkeyManager] Monitoring stopped")
     }
 
@@ -77,41 +91,34 @@ class HotkeyManager {
         type: CGEventType,
         event: CGEvent
     ) -> Unmanaged<CGEvent>? {
-        // Re-enable tap if it was disabled (can happen under heavy load)
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap = eventTap {
                 CGEvent.tapEnable(tap: tap, enable: true)
-                print("[HotkeyManager] Re-enabled event tap")
             }
             return Unmanaged.passUnretained(event)
         }
 
-        // Handle flagsChanged for modifier keys like Option
         if type == .flagsChanged {
             let flags = event.flags
-            let optionPressed = flags.contains(.maskAlternate)
+            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            let isKeyPressed = isModifierKeyPressed(flags: flags, triggerKey: currentTriggerKey)
 
-            if optionPressed && !isHolding {
-                // Option key pressed
+            if isKeyPressed && !isHolding {
                 let now = Date()
-                print("[HotkeyManager] Option key pressed")
 
-                if let lastPress = lastOptionPressTime,
+                if let lastPress = lastKeyPressTime,
                    now.timeIntervalSince(lastPress) < doubleTapThreshold {
-                    // Double tap detected - start recording
                     print("[HotkeyManager] DOUBLE-TAP DETECTED!")
                     isHolding = true
-                    lastOptionPressTime = nil
+                    lastKeyPressTime = nil
                     DispatchQueue.main.async { [weak self] in
                         self?.onDoubleTap?()
                     }
                 } else {
-                    // First tap
-                    lastOptionPressTime = now
+                    lastKeyPressTime = now
                 }
-            } else if !optionPressed && isHolding {
-                // Option key released while holding - stop recording
-                print("[HotkeyManager] Option key released - stopping")
+            } else if !isKeyPressed && isHolding {
+                print("[HotkeyManager] Key released - stopping")
                 isHolding = false
                 DispatchQueue.main.async { [weak self] in
                     self?.onKeyUp?()
@@ -120,6 +127,17 @@ class HotkeyManager {
         }
 
         return Unmanaged.passUnretained(event)
+    }
+
+    private func isModifierKeyPressed(flags: CGEventFlags, triggerKey: TriggerKey) -> Bool {
+        switch triggerKey {
+        case .option, .rightOption:
+            return flags.contains(.maskAlternate)
+        case .control:
+            return flags.contains(.maskControl)
+        case .fn:
+            return flags.contains(.maskSecondaryFn)
+        }
     }
 
     deinit {

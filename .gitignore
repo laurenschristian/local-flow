@@ -58,3 +58,6 @@ logs/
 # Temp files
 tmp/
 .tmp/
+
+# Internal specs
+SPEC.md

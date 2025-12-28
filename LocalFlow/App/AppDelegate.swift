@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import AVFoundation
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -9,15 +10,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var whisperService: WhisperService!
     private var textInserter: TextInserter!
 
+    private var startSound: NSSound?
+    private var stopSound: NSSound?
+
     @ObservedObject private var appState = AppState.shared
+    private let settings = Settings.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupServices()
+        setupSounds()
         setupMenuBar()
         setupHotkey()
         loadModel()
 
-        print("[LocalFlow] App launched - double-tap Option key to record")
+        print("[LocalFlow] App launched - double-tap \(settings.triggerKey.displayName) to record")
     }
 
     private func setupServices() {
@@ -29,6 +35,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         audioRecorder.onLevelUpdate = { level in
             RecordingOverlayController.shared.updateAudioLevel(level)
         }
+    }
+
+    private func setupSounds() {
+        startSound = NSSound(named: "Tink")
+        stopSound = NSSound(named: "Pop")
     }
 
     private func setupMenuBar() {
@@ -67,7 +78,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 AppState.shared.status = .loading
             }
 
-            let modelPath = Settings.shared.modelPath
+            let modelPath = settings.modelPath
             print("[LocalFlow] Loading model from: \(modelPath)")
             let success = await whisperService.loadModel(path: modelPath)
 
@@ -99,6 +110,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if settings.soundFeedback {
+            startSound?.play()
+        }
+
         print("[LocalFlow] Recording started")
         AppState.shared.status = .recording
         updateMenuBarIcon(recording: true)
@@ -111,6 +126,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard AppState.shared.status == .recording else {
             print("[LocalFlow] Cannot stop - not recording")
             return
+        }
+
+        if settings.soundFeedback {
+            stopSound?.play()
         }
 
         print("[LocalFlow] Stopping recording and transcribing...")
@@ -134,11 +153,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 RecordingOverlayController.shared.hide()
 
                 switch result {
-                case .success(let text):
+                case .success(var text):
                     print("[LocalFlow] Transcription: \(text)")
                     if !text.isEmpty {
+                        if settings.punctuationMode {
+                            text = addPunctuation(text)
+                        }
+
                         AppState.shared.lastTranscription = text
-                        textInserter.insertText(text)
+                        settings.addToHistory(text)
+                        textInserter.insertText(text, clipboardOnly: settings.clipboardMode)
                     }
                     AppState.shared.status = .idle
                 case .failure(let error):
@@ -147,6 +171,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    private func addPunctuation(_ text: String) -> String {
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if result.isEmpty { return result }
+
+        let firstChar = result.removeFirst()
+        result = String(firstChar).uppercased() + result
+
+        let lastChar = result.last ?? Character(" ")
+        if !".!?".contains(lastChar) {
+            result += "."
+        }
+
+        return result
     }
 
     private func updateMenuBarIcon(recording: Bool) {

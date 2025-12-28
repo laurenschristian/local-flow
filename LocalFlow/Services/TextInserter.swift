@@ -4,20 +4,21 @@ import Carbon
 class TextInserter {
     private let pasteboard = NSPasteboard.general
 
-    func insertText(_ text: String) {
-        // Save current clipboard contents
+    func insertText(_ text: String, clipboardOnly: Bool = false) {
+        if clipboardOnly {
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            return
+        }
+
         let savedContents = saveClipboard()
 
-        // Copy transcription to clipboard
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // Small delay to ensure clipboard is ready
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            // Simulate Cmd+V
             self?.simulatePaste()
 
-            // Restore original clipboard after a delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.restoreClipboard(savedContents)
             }
