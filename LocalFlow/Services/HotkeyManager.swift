@@ -130,13 +130,22 @@ class HotkeyManager {
     }
 
     private func isModifierKeyPressed(flags: CGEventFlags, triggerKey: TriggerKey) -> Bool {
+        // Check that ONLY the trigger modifier is pressed (not part of a combo like Cmd+Opt+F)
+        let hasCommand = flags.contains(.maskCommand)
+        let hasShift = flags.contains(.maskShift)
+        let hasControl = flags.contains(.maskControl)
+        let hasOption = flags.contains(.maskAlternate)
+
         switch triggerKey {
         case .option, .rightOption:
-            return flags.contains(.maskAlternate)
+            // Option must be pressed, but Command/Shift/Control must NOT be pressed
+            return hasOption && !hasCommand && !hasShift && !hasControl
         case .control:
-            return flags.contains(.maskControl)
+            // Control must be pressed, but Command/Shift/Option must NOT be pressed
+            return hasControl && !hasCommand && !hasShift && !hasOption
         case .fn:
-            return flags.contains(.maskSecondaryFn)
+            // Fn must be pressed alone
+            return flags.contains(.maskSecondaryFn) && !hasCommand && !hasShift && !hasControl && !hasOption
         }
     }
 

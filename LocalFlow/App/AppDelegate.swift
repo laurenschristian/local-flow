@@ -5,7 +5,6 @@ import Combine
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
-    private var popover: NSPopover!
     private var hotkeyManager: HotkeyManager!
     private var audioRecorder: AudioRecorder!
     private var whisperService: WhisperService!
@@ -32,16 +31,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         print("[LocalFlow] App launched - double-tap \(settings.triggerKey.displayName) to record")
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        // Clean up whisper context before exit to prevent Metal crash
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            await whisperService.unloadModel()
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 2.0)
     }
 
     private func shouldShowOnboarding() -> Bool {
@@ -156,14 +145,67 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "LocalFlow")
-            button.action = #selector(togglePopover)
-            button.target = self
         }
 
-        popover = NSPopover()
-        popover.contentSize = NSSize(width: 280, height: 200)
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: MenuBarView())
+        let menu = NSMenu()
+
+        // Status item
+        let statusItem = NSMenuItem(title: "Ready", action: nil, keyEquivalent: "")
+        statusItem.tag = 1
+        menu.addItem(statusItem)
+
+        // Model info
+        let modelItem = NSMenuItem(title: "Model: \(settings.selectedModel.shortName)", action: nil, keyEquivalent: "")
+        modelItem.tag = 2
+        menu.addItem(modelItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Instructions
+        let instructionItem = NSMenuItem(title: "Double-tap \(settings.triggerKey.displayName) to record", action: nil, keyEquivalent: "")
+        instructionItem.isEnabled = false
+        menu.addItem(instructionItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Settings
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        // Check for updates
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Quit
+        let quitItem = NSMenuItem(title: "Quit LocalFlow", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(quitItem)
+
+        self.statusItem.menu = menu
+
+        // Update status periodically
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.updateMenuStatus()
+        }
+    }
+
+    private func updateMenuStatus() {
+        guard let menu = statusItem.menu else { return }
+        if let statusItem = menu.item(withTag: 1) {
+            statusItem.title = appState.status.displayText
+        }
+    }
+
+    @objc private func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+
+    @objc private func checkForUpdates() {
+        UpdateController.shared.checkForUpdates()
     }
 
     private func setupHotkey() {
@@ -199,20 +241,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     print("[LocalFlow] Failed to load model")
                     AppState.shared.status = .error(.modelLoadFailed)
                 }
-            }
-        }
-    }
-
-    @objc private func togglePopover() {
-        guard statusItem.button != nil else { return }
-
-        if popover.isShown {
-            popover.performClose(nil)
-        } else {
-            // Ensure we're not in middle of a layout pass
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self, let button = self.statusItem.button else { return }
-                self.popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             }
         }
     }
