@@ -16,6 +16,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         setupHotkey()
         loadModel()
+
+        print("[LocalFlow] App launched - double-tap Option key to record")
     }
 
     private func setupServices() {
@@ -23,6 +25,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         whisperService = WhisperService()
         textInserter = TextInserter()
         hotkeyManager = HotkeyManager()
+
+        audioRecorder.onLevelUpdate = { level in
+            RecordingOverlayController.shared.updateAudioLevel(level)
+        }
     }
 
     private func setupMenuBar() {
@@ -42,14 +48,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupHotkey() {
         hotkeyManager.onDoubleTap = { [weak self] in
+            print("[LocalFlow] Double-tap detected! Starting recording...")
             self?.startRecording()
         }
 
         hotkeyManager.onKeyUp = { [weak self] in
+            print("[LocalFlow] Key released! Stopping recording...")
             self?.stopRecordingAndTranscribe()
         }
 
         hotkeyManager.startMonitoring()
+        print("[LocalFlow] Hotkey monitoring started")
     }
 
     private func loadModel() {
@@ -59,10 +68,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             let modelPath = Settings.shared.modelPath
+            print("[LocalFlow] Loading model from: \(modelPath)")
             let success = await whisperService.loadModel(path: modelPath)
 
             await MainActor.run {
-                AppState.shared.status = success ? .idle : .error("Failed to load model")
+                if success {
+                    print("[LocalFlow] Model loaded successfully")
+                    AppState.shared.status = .idle
+                } else {
+                    print("[LocalFlow] Failed to load model")
+                    AppState.shared.status = .error("Failed to load model")
+                }
             }
         }
     }
@@ -78,35 +94,55 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startRecording() {
-        guard AppState.shared.status == .idle else { return }
+        guard AppState.shared.status == .idle else {
+            print("[LocalFlow] Cannot start recording - status is \(AppState.shared.status)")
+            return
+        }
 
+        print("[LocalFlow] Recording started")
         AppState.shared.status = .recording
         updateMenuBarIcon(recording: true)
+        RecordingOverlayController.shared.show()
+        RecordingOverlayController.shared.updateStatus(.recording)
         audioRecorder.startRecording()
     }
 
     private func stopRecordingAndTranscribe() {
-        guard AppState.shared.status == .recording else { return }
-
-        AppState.shared.status = .transcribing
-        updateMenuBarIcon(recording: false)
-
-        guard let audioData = audioRecorder.stopRecording() else {
-            AppState.shared.status = .error("No audio recorded")
+        guard AppState.shared.status == .recording else {
+            print("[LocalFlow] Cannot stop - not recording")
             return
         }
+
+        print("[LocalFlow] Stopping recording and transcribing...")
+        AppState.shared.status = .transcribing
+        updateMenuBarIcon(recording: false)
+        RecordingOverlayController.shared.updateStatus(.transcribing)
+
+        guard let audioData = audioRecorder.stopRecording() else {
+            print("[LocalFlow] No audio data recorded")
+            AppState.shared.status = .error("No audio recorded")
+            RecordingOverlayController.shared.hide()
+            return
+        }
+
+        print("[LocalFlow] Got \(audioData.count) audio samples, transcribing...")
 
         Task {
             let result = await whisperService.transcribe(audioData: audioData)
 
             await MainActor.run {
+                RecordingOverlayController.shared.hide()
+
                 switch result {
                 case .success(let text):
+                    print("[LocalFlow] Transcription: \(text)")
                     if !text.isEmpty {
+                        AppState.shared.lastTranscription = text
                         textInserter.insertText(text)
                     }
                     AppState.shared.status = .idle
                 case .failure(let error):
+                    print("[LocalFlow] Transcription error: \(error)")
                     AppState.shared.status = .error(error.localizedDescription)
                 }
             }

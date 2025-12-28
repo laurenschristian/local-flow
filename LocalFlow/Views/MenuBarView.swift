@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarView: View {
     @ObservedObject private var appState = AppState.shared
     @ObservedObject private var settings = Settings.shared
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -43,19 +44,6 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Permissions status
-            if !appState.isAccessibilityGranted {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    Text("Accessibility access required")
-                        .font(.caption)
-                }
-                .onTapGesture {
-                    openAccessibilitySettings()
-                }
-            }
-
             // Actions
             HStack {
                 Button("Settings...") {
@@ -72,17 +60,12 @@ struct MenuBarView: View {
             }
         }
         .padding()
-        .frame(width: 260)
+        .frame(width: 280)
+        .onAppear {
+            appState.checkPermissions()
+        }
     }
 
-    private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-    }
-
-    private func openAccessibilitySettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        NSWorkspace.shared.open(url)
-    }
 }
 
 #Preview {

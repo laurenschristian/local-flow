@@ -9,7 +9,8 @@ DerivedData/
 *.ipa
 *.dSYM.zip
 *.dSYM
-*.xcworkspace
+xcuserdata/
+*.xcworkspace/
 !*.xcworkspace/contents.xcworkspacedata
 
 # Swift Package Manager
@@ -17,22 +18,20 @@ DerivedData/
 Packages/
 Package.resolved
 
-# CocoaPods
-Pods/
-*.xcworkspace
-
-# Carthage
-Carthage/Build/
-
-# Models (downloaded separately)
+# Whisper models (downloaded separately)
 models/*.bin
+models/*.ggml
 *.ggml
+
+# whisper.cpp (cloned during setup)
+vendor/
 
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
+.Trash-*
 
 # IDE
 .idea/
@@ -40,13 +39,22 @@ models/*.bin
 *.swo
 *~
 .vscode/
+*.code-workspace
 
 # Archives
 *.zip
 *.tar.gz
 
-# Credentials
+# Credentials/Signing
 *.pem
 *.p12
 *.mobileprovision
-vendor/
+*.provisionprofile
+
+# Logs
+*.log
+logs/
+
+# Temp files
+tmp/
+.tmp/

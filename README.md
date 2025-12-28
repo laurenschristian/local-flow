@@ -10,88 +10,94 @@ LocalFlow is a local alternative to [Wispr Flow](https://wisprflow.ai/). All spe
 
 - **Double-tap to talk** - Double-tap Option key, hold and speak, release to transcribe
 - **Works everywhere** - Inserts text into any app (Slack, VS Code, Safari, etc.)
+- **Visual feedback** - Floating overlay shows recording status with live audio visualization
 - **Fast** - Sub-second transcription on Apple Silicon
 - **Private** - 100% local processing, no cloud, no telemetry
 - **Lightweight** - Menu bar app using < 50MB RAM when idle
 
 ## Requirements
 
-- macOS 13.0+ (Ventura)
-- Apple Silicon recommended (Intel supported with reduced speed)
+- macOS 14.0+ (Sonoma)
+- Apple Silicon (M1/M2/M3)
 - ~500MB disk space (with small model)
-- Xcode 15+ for building
+- Xcode 15+ and XcodeGen
 
-## Setup
-
-### 1. Clone and build whisper.cpp
+## Quick Start
 
 ```bash
+# Install XcodeGen if not already installed
+brew install xcodegen
+
+# Clone the repo
 git clone https://github.com/laurenschristian/local-wisper.git
 cd local-wisper
 
 # Build whisper.cpp with Metal support
 ./scripts/setup-whisper.sh
-```
 
-### 2. Download a Whisper model
-
-```bash
+# Download a Whisper model (small recommended)
 ./scripts/download-model.sh small
+
+# Generate Xcode project and build
+xcodegen generate
+./scripts/build-and-install.sh
+
+# Grant accessibility permissions (opens System Settings)
+./scripts/grant-permissions.sh
 ```
 
-### 3. Create Xcode project
+## Permissions
 
-1. Open Xcode → File → New → Project
-2. Choose macOS → App
-3. Product Name: `LocalFlow`
-4. Bundle Identifier: `com.yourname.localflow`
-5. Interface: SwiftUI, Language: Swift
+LocalFlow requires two permissions:
 
-### 4. Add source files
+| Permission | Purpose | How to Grant |
+|------------|---------|--------------|
+| Microphone | Record your voice | Automatic prompt on first use |
+| Accessibility | Insert text into apps | Run `./scripts/grant-permissions.sh` |
 
-1. Delete the auto-generated ContentView.swift
-2. Drag all files from `LocalFlow/` folder into Xcode
-3. Ensure "Copy items if needed" is unchecked
-
-### 5. Link whisper.cpp
-
-In Build Settings:
-- **Header Search Paths**: Add `$(PROJECT_DIR)/vendor/whisper.cpp`
-- **Library Search Paths**: Add `$(PROJECT_DIR)/vendor/whisper.cpp/build`
-- **Other Linker Flags**: Add `-lwhisper -lc++`
-
-In Build Phases → Link Binary With Libraries:
-- Add `Metal.framework`
-- Add `Accelerate.framework`
-- Add `libwhisper.a` from `vendor/whisper.cpp/build/`
-
-### 6. Configure entitlements
-
-1. Add `LocalFlow.entitlements` from the LocalFlow folder
-2. In Signing & Capabilities, add:
-   - Audio Input (for microphone)
-   - Accessibility (for text insertion)
-
-### 7. Build and run
-
-Press Cmd+R to build and run. Grant permissions when prompted.
+**Note on rebuilding**: Accessibility permissions are tied to the app's code signature. If you rebuild, you'll need to re-grant access. For persistent permissions, see `scripts/setup-signing.sh`.
 
 ## Usage
 
-1. Launch LocalFlow - it appears in your menu bar
-2. Grant microphone and accessibility permissions when prompted
-3. **Double-tap Option key** to start recording
-4. Keep holding and speak clearly
-5. Release - your text appears at the cursor
+1. **Launch** - LocalFlow appears in your menu bar (waveform icon)
+2. **Record** - Double-tap Option key, then hold and speak
+3. **Transcribe** - Release to transcribe and insert text at cursor
+4. **Done** - Text appears wherever your cursor is
+
+The floating overlay shows:
+- **Listening** - Recording with live audio visualization
+- **Processing** - Transcribing your speech
 
 ## Models
 
-| Model | Size | Speed | Best For |
-|-------|------|-------|----------|
-| tiny | 75MB | Fastest | Quick notes |
-| base | 142MB | Fast | General use |
-| small | 466MB | Balanced | **Recommended** |
-| medium | 1.5GB | Slower | High accuracy |
+| Model | Size | Speed | Accuracy | Best For |
+|-------|------|-------|----------|----------|
+| tiny | 75MB | Fastest | Basic | Quick notes, testing |
+| base | 142MB | Fast | Good | General use |
+| small | 466MB | Balanced | Better | **Recommended** |
+| medium | 1.5GB | Slower | Best | High accuracy needs |
+
+Download different models:
+```bash
+./scripts/download-model.sh tiny    # Fastest
+./scripts/download-model.sh base    # Balanced
+./scripts/download-model.sh small   # Recommended
+./scripts/download-model.sh medium  # Most accurate
+```
+
+## Troubleshooting
+
+**"Failed to load model"**
+- Ensure you've downloaded a model: `./scripts/download-model.sh small`
+- Check the model exists: `ls models/`
+
+**Hotkey not working**
+- Grant accessibility permissions: `./scripts/grant-permissions.sh`
+- Check System Settings > Privacy & Security > Accessibility
+
+**No audio recording**
+- Grant microphone access when prompted
+- Check System Settings > Privacy & Security > Microphone
 
 ## Project Structure
 
@@ -99,39 +105,53 @@ Press Cmd+R to build and run. Grant permissions when prompted.
 local-wisper/
 ├── LocalFlow/
 │   ├── App/
-│   │   ├── LocalFlowApp.swift      # Entry point
-│   │   └── AppDelegate.swift       # Menu bar setup
+│   │   ├── LocalFlowApp.swift       # App entry point
+│   │   └── AppDelegate.swift        # Menu bar + orchestration
 │   ├── Views/
-│   │   ├── MenuBarView.swift       # Popover UI
-│   │   └── SettingsView.swift      # Settings window
+│   │   ├── MenuBarView.swift        # Menu bar popover
+│   │   ├── SettingsView.swift       # Settings window
+│   │   └── RecordingOverlay.swift   # Floating recording indicator
 │   ├── Services/
-│   │   ├── AudioRecorder.swift     # Microphone capture
-│   │   ├── WhisperService.swift    # Transcription
-│   │   ├── HotkeyManager.swift     # Double-tap detection
-│   │   └── TextInserter.swift      # Clipboard + paste
-│   ├── Models/
-│   │   ├── AppState.swift          # Global state
-│   │   └── Settings.swift          # User preferences
-│   ├── Info.plist
-│   └── LocalFlow.entitlements
+│   │   ├── AudioRecorder.swift      # Microphone capture (16kHz)
+│   │   ├── WhisperService.swift     # Whisper transcription
+│   │   ├── HotkeyManager.swift      # Double-tap Option detection
+│   │   └── TextInserter.swift       # Clipboard + Cmd+V paste
+│   └── Models/
+│       ├── AppState.swift           # Global app state
+│       └── Settings.swift           # User preferences
 ├── scripts/
-│   ├── setup-whisper.sh            # Build whisper.cpp
-│   └── download-model.sh           # Download models
+│   ├── setup-whisper.sh             # Clone + build whisper.cpp
+│   ├── download-model.sh            # Download Whisper models
+│   ├── build-and-install.sh         # Build + install to /Applications
+│   ├── grant-permissions.sh         # Open accessibility settings
+│   └── setup-signing.sh             # Code signing instructions
+├── models/                          # Whisper models (after download)
 ├── vendor/                          # whisper.cpp (after setup)
-├── SPEC.md                          # Technical specification
-└── README.md
+└── project.yml                      # XcodeGen configuration
 ```
 
-## Development Status
+## How It Works
 
-Work in Progress - See [SPEC.md](./SPEC.md) for the full technical specification.
+1. **Hotkey Detection** - CGEvent tap monitors for double-tap Option key
+2. **Audio Capture** - AVAudioEngine records at 16kHz mono (Whisper's expected format)
+3. **Transcription** - whisper.cpp processes audio using Metal GPU acceleration
+4. **Text Insertion** - Copies text to clipboard and simulates Cmd+V
 
 ## Tech Stack
 
 - Swift 5.9 / SwiftUI
-- whisper.cpp (Metal + CoreML acceleration)
-- AVFoundation for audio capture
-- CGEvent for text insertion
+- whisper.cpp with Metal acceleration
+- AVFoundation for audio
+- CGEvent for global hotkeys and text insertion
+- XcodeGen for project generation
+
+## Contributing
+
+1. Fork the repo
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a PR
 
 ## License
 

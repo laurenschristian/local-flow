@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AVFoundation
 
 enum AppStatus: Equatable {
     case loading
@@ -40,10 +41,35 @@ class AppState: ObservableObject {
 
     private init() {
         checkPermissions()
+        setupNotifications()
+        requestMicrophonePermission()
+    }
+
+    private func setupNotifications() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkPermissions()
+            }
+        }
     }
 
     func checkPermissions() {
+        // Check silently - no prompts
         isAccessibilityGranted = AXIsProcessTrusted()
-        // Microphone permission is checked when we start recording
+
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        isMicrophoneGranted = micStatus == .authorized
+    }
+
+    func requestMicrophonePermission() {
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+            Task { @MainActor in
+                self?.isMicrophoneGranted = granted
+            }
+        }
     }
 }
