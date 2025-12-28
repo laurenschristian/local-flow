@@ -49,3 +49,4 @@ models/*.bin
 *.pem
 *.p12
 *.mobileprovision
+vendor/
