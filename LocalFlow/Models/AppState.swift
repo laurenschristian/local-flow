@@ -4,6 +4,7 @@ import AVFoundation
 
 enum AppStatus: Equatable {
     case loading
+    case downloading(progress: Double)
     case idle
     case recording
     case transcribing
@@ -12,6 +13,7 @@ enum AppStatus: Equatable {
     var displayText: String {
         switch self {
         case .loading: return "Loading model..."
+        case .downloading(let progress): return "Downloading model... \(Int(progress * 100))%"
         case .idle: return "Ready"
         case .recording: return "Recording..."
         case .transcribing: return "Transcribing..."
@@ -22,6 +24,7 @@ enum AppStatus: Equatable {
     var color: Color {
         switch self {
         case .loading: return .orange
+        case .downloading: return .orange
         case .idle: return .green
         case .recording: return .red
         case .transcribing: return .blue

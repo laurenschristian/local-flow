@@ -1,6 +1,7 @@
 import Cocoa
 import SwiftUI
 import AVFoundation
+import Combine
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -9,6 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var audioRecorder: AudioRecorder!
     private var whisperService: WhisperService!
     private var textInserter: TextInserter!
+    private var downloadCancellable: AnyCancellable?
 
     private var startSound: NSSound?
     private var stopSound: NSSound?
@@ -21,9 +23,52 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupSounds()
         setupMenuBar()
         setupHotkey()
-        loadModel()
+        checkAndLoadModel()
 
         print("[LocalFlow] App launched - double-tap \(settings.triggerKey.displayName) to record")
+    }
+
+    private func checkAndLoadModel() {
+        if settings.hasAnyModel() {
+            if let available = settings.firstAvailableModel(), !settings.isModelDownloaded(settings.selectedModel) {
+                settings.selectedModel = available
+            }
+            loadModel()
+        } else {
+            downloadDefaultModel()
+        }
+    }
+
+    private func downloadDefaultModel() {
+        let defaultModel = WhisperModel.base
+        print("[LocalFlow] No model found, downloading \(defaultModel.displayName)...")
+
+        Task { @MainActor in
+            AppState.shared.status = .downloading(progress: 0)
+        }
+
+        downloadCancellable = ModelDownloader.shared.$progress
+            .receive(on: DispatchQueue.main)
+            .sink { progress in
+                if ModelDownloader.shared.isDownloading {
+                    AppState.shared.status = .downloading(progress: progress)
+                }
+            }
+
+        Task {
+            let success = await ModelDownloader.shared.downloadModel(defaultModel)
+
+            await MainActor.run {
+                downloadCancellable?.cancel()
+
+                if success {
+                    settings.selectedModel = defaultModel
+                    loadModel()
+                } else {
+                    AppState.shared.status = .error("Failed to download model")
+                }
+            }
+        }
     }
 
     private func setupServices() {
