@@ -29,9 +29,10 @@ LocalFlow is a privacy-first voice dictation app for macOS. Speech recognition r
 ## Features
 
 - **Double-tap to dictate** — Double-tap Option key, hold and speak, release to transcribe
-- **Works in any app** — Text is inserted wherever your cursor is (Slack, VS Code, Notes, browsers, etc.)
-- **Visual feedback** — Floating overlay shows recording status with live audio waveform
-- **Punctuation mode** — Automatically add punctuation based on speech patterns
+- **Works in any app** — Text is inserted wherever your cursor is
+- **Auto-updates** — Built-in update system keeps you current
+- **Visual feedback** — Floating overlay with live audio waveform
+- **Punctuation mode** — Automatically add punctuation
 - **Clipboard mode** — Copy to clipboard without auto-pasting
 - **History** — Access your recent transcriptions
 - **Custom hotkey** — Configure your preferred trigger key
@@ -39,40 +40,50 @@ LocalFlow is a privacy-first voice dictation app for macOS. Speech recognition r
 - **Auto-launch** — Start LocalFlow when you log in
 - **Fast** — Sub-second transcription on Apple Silicon
 - **Private** — No cloud, no telemetry, no data collection
-- **Lightweight** — Under 50MB RAM when idle
 
 ## Requirements
 
 - macOS 14.0+ (Sonoma)
 - Apple Silicon (M1/M2/M3/M4)
-- ~500MB disk space
-- Xcode 15+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 
 ## Installation
 
-```bash
-# Install dependencies
-brew install xcodegen cmake
+### Download (Recommended)
 
-# Clone repository
-git clone https://github.com/laurenschristian/local-flow.git
-cd local-flow
+1. **Download** the latest DMG from [Releases](https://github.com/laurenschristian/local-flow/releases)
 
-# Build whisper.cpp with Metal acceleration
-./scripts/setup-whisper.sh
+2. **Open the DMG** and drag LocalFlow to Applications
 
-# Download Whisper model
-./scripts/download-model.sh small
+3. **First launch** — Right-click LocalFlow.app and select "Open"
 
-# Build and install
-xcodegen generate
-./scripts/build-and-install.sh
+   > macOS will warn that the app is from an unidentified developer. Click "Open" to proceed. This only happens once.
 
-# Grant accessibility permissions
-./scripts/grant-permissions.sh
-```
+4. **Grant permissions** when prompted:
+   - **Accessibility** — Required for hotkey detection and text insertion
+   - **Microphone** — Required for voice recording
 
-For detailed instructions, see the [Installation Guide](docs/INSTALL.md).
+5. **Download a model** — Go to Settings > Model and download your preferred model
+
+That's it! Double-tap Option to start dictating.
+
+### Bypassing Gatekeeper
+
+Since LocalFlow isn't notarized with Apple, macOS shows a warning on first launch. Two ways to handle this:
+
+**Option A: Right-click to Open**
+1. Right-click (or Control-click) on LocalFlow.app
+2. Select "Open" from the menu
+3. Click "Open" in the dialog
+
+**Option B: System Settings**
+1. Try to open LocalFlow normally (it will be blocked)
+2. Go to System Settings > Privacy & Security
+3. Scroll down to find "LocalFlow was blocked"
+4. Click "Open Anyway"
+
+### Build from Source
+
+For developers who want to build from source, see [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Usage
 
@@ -82,10 +93,7 @@ For detailed instructions, see the [Installation Guide](docs/INSTALL.md).
 | **Stop & transcribe** | Release the key |
 | **Open menu** | Click waveform icon in menu bar |
 | **Settings** | Click menu bar icon → Settings |
-
-The floating overlay indicates current status:
-- **Listening** — Recording your voice (shows live waveform)
-- **Processing** — Transcribing speech to text
+| **Check for updates** | Click menu bar icon → Check for Updates |
 
 ## Configuration
 
@@ -94,7 +102,7 @@ Access settings via the menu bar icon.
 | Setting | Description |
 |---------|-------------|
 | **Model** | Choose Whisper model (tiny/base/small/medium) |
-| **Hotkey** | Configure trigger key |
+| **Hotkey** | Configure trigger key (Option, Control, Fn) |
 | **Punctuation** | Auto-add punctuation |
 | **Clipboard mode** | Copy only, don't paste |
 | **Sound feedback** | Play sounds on record start/stop |
@@ -109,46 +117,17 @@ Access settings via the menu bar icon.
 | small | 466MB | ★★★☆☆ | ★★★★☆ |
 | medium | 1.5GB | ★★☆☆☆ | ★★★★★ |
 
-Download models with:
-```bash
-./scripts/download-model.sh <model-name>
-```
+**Recommendation**: Start with `small` for the best balance of speed and accuracy.
 
-## Architecture
+## Privacy
 
-```
-LocalFlow/
-├── App/                    # Application entry & lifecycle
-├── Views/                  # SwiftUI views
-│   ├── MenuBarView         # Menu bar popover
-│   ├── SettingsView        # Preferences window
-│   ├── HistoryView         # Transcription history
-│   └── RecordingOverlay    # Floating status indicator
-├── Services/               # Core functionality
-│   ├── AudioRecorder       # Microphone capture
-│   ├── WhisperService      # Speech recognition
-│   ├── HotkeyManager       # Global hotkey detection
-│   └── TextInserter        # Text insertion
-└── Models/                 # Data models & state
-```
+LocalFlow is designed with privacy as a core principle:
 
-## Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| UI | SwiftUI |
-| Speech Recognition | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) |
-| GPU Acceleration | Metal |
-| Audio | AVFoundation |
-| Hotkeys | CGEvent |
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- All speech recognition happens on-device using whisper.cpp
+- No internet connection required for transcription
+- No data is ever sent to external servers
+- No analytics or telemetry
+- Update checks only fetch a small XML file from GitHub
 
 ## License
 

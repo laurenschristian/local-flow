@@ -1,199 +1,139 @@
 # LocalFlow Installation Guide
 
-Complete guide to installing LocalFlow on your Mac.
+## Quick Install (Recommended)
 
-## System Requirements
+Download the latest DMG from [Releases](https://github.com/laurenschristian/local-flow/releases) and follow the instructions in the [README](../README.md#installation).
 
-| Requirement | Minimum | Recommended |
-|-------------|---------|-------------|
-| macOS | 14.0 (Sonoma) | 14.0+ |
-| Chip | Apple Silicon (M1) | M1 Pro/Max or newer |
-| RAM | 8GB | 16GB |
-| Disk Space | 500MB | 1GB |
-| Xcode | 15.0 | Latest |
+---
 
-## Prerequisites
+## Build from Source
 
-### 1. Install Xcode Command Line Tools
+This guide is for developers who want to build LocalFlow from source.
+
+### Requirements
+
+| Requirement | Minimum |
+|-------------|---------|
+| macOS | 14.0 (Sonoma) |
+| Chip | Apple Silicon (M1+) |
+| Xcode | 15.0+ |
+| RAM | 8GB |
+| Disk | 1GB |
+
+### Prerequisites
 
 ```bash
+# Install Xcode Command Line Tools
 xcode-select --install
-```
 
-### 2. Install Homebrew (if not installed)
-
-```bash
+# Install Homebrew (if needed)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
 
-### 3. Install Required Tools
-
-```bash
+# Install required tools
 brew install xcodegen cmake
 ```
 
-## Installation
-
-### Step 1: Clone the Repository
+### Build Steps
 
 ```bash
+# Clone repository
 git clone https://github.com/laurenschristian/local-flow.git
 cd local-flow
-```
 
-### Step 2: Build whisper.cpp
-
-This builds the speech recognition engine with Metal GPU acceleration:
-
-```bash
+# Build whisper.cpp with Metal acceleration
 ./scripts/setup-whisper.sh
-```
 
-This will:
-- Clone whisper.cpp from GitHub
-- Build with Metal support for Apple Silicon
-- Create necessary library files
-
-**Expected time**: 2-5 minutes
-
-### Step 3: Download a Whisper Model
-
-```bash
+# Download Whisper model
 ./scripts/download-model.sh small
-```
 
-Available models:
-
-| Model | Download Size | Disk Size | RAM Usage |
-|-------|---------------|-----------|-----------|
-| tiny | 75MB | 75MB | ~400MB |
-| base | 142MB | 142MB | ~500MB |
-| small | 466MB | 466MB | ~1GB |
-| medium | 1.5GB | 1.5GB | ~2.5GB |
-
-**Recommendation**: Start with `small` for the best balance of speed and accuracy.
-
-### Step 4: Generate Xcode Project
-
-```bash
+# Generate Xcode project
 xcodegen generate
-```
 
-### Step 5: Build and Install
-
-```bash
+# Build and install
 ./scripts/build-and-install.sh
 ```
 
-This will:
-- Build LocalFlow in Release mode
-- Install to `/Applications/LocalFlow.app`
-- Launch the app
+### Grant Permissions
 
-### Step 6: Grant Permissions
+After building, you need to grant permissions:
 
-LocalFlow needs two permissions to function:
+1. **Accessibility**: System Settings > Privacy & Security > Accessibility
+   - Click the + button
+   - Navigate to `/Applications/LocalFlow.app`
+   - Toggle ON
 
-#### Microphone Access
-- Automatically prompted on first recording attempt
-- Click "OK" when prompted
+2. **Microphone**: Automatically prompted on first recording
 
-#### Accessibility Access
-Run this command to open System Settings:
+> **Note**: When building from source, accessibility permissions reset each time you rebuild because the code signature changes. This is expected macOS behavior. For persistent permissions, use the pre-built DMG from Releases.
 
-```bash
-./scripts/grant-permissions.sh
-```
+### Models
 
-Then:
-1. Find LocalFlow in the list
-2. Toggle it ON
-3. If not listed, click '+' and navigate to `/Applications/LocalFlow.app`
-
-## Verifying Installation
-
-1. Look for the waveform icon in your menu bar
-2. Click it to see the status (should show "Ready")
-3. Double-tap the Option key to test recording
-4. Speak a few words, then release
-5. Your text should appear at the cursor
-
-## Updating LocalFlow
-
-To update to a new version:
+Download models with:
 
 ```bash
-cd local-flow
-git pull origin main
-./scripts/build-and-install.sh
-./scripts/grant-permissions.sh  # Re-grant if needed
+./scripts/download-model.sh <model>
 ```
 
-## Uninstalling
+| Model | Size | Speed | Accuracy |
+|-------|------|-------|----------|
+| tiny | 75MB | Fastest | Basic |
+| base | 142MB | Fast | Good |
+| small | 466MB | Medium | Better |
+| medium | 1.5GB | Slow | Best |
+
+### Development
 
 ```bash
-# Remove the app
-rm -rf /Applications/LocalFlow.app
+# Regenerate project after changes to project.yml
+xcodegen generate
 
-# Remove models (optional)
-rm -rf ~/path/to/local-flow/models/*.bin
+# Build release
+xcodebuild -project LocalFlow.xcodeproj -scheme LocalFlow -configuration Release build
 
-# Remove the repository (optional)
-rm -rf ~/path/to/local-flow
+# Run tests
+xcodebuild -project LocalFlow.xcodeproj -scheme LocalFlow test
 ```
 
-## Troubleshooting
-
-### Build Fails with "whisper.h not found"
-
-Ensure whisper.cpp was built correctly:
+### Creating a Release
 
 ```bash
-ls vendor/whisper.cpp/build/src/libwhisper.a
+# Bump version
+./scripts/bump-version.sh 0.3.0
+
+# Build, create DMG, sign, update appcast
+./scripts/release.sh
+
+# Commit and push
+git add appcast.xml
+git commit -m "release v0.3.0"
+git push
+
+# Create GitHub release
+gh release create v0.3.0 build/LocalFlow-v0.3.0-mac-arm64.dmg --title "LocalFlow v0.3.0"
 ```
 
-If missing, rebuild:
+### Troubleshooting
 
+**"whisper.h not found"**
 ```bash
 rm -rf vendor/whisper.cpp
 ./scripts/setup-whisper.sh
 ```
 
-### "Failed to load model" Error
+**"Failed to load model"**
+```bash
+./scripts/download-model.sh small
+```
 
-1. Check model exists:
-   ```bash
-   ls models/
-   ```
+**Hotkey not working**
+- Check System Settings > Privacy & Security > Accessibility
+- Ensure LocalFlow is toggled ON
+- Restart the app
 
-2. Re-download if needed:
-   ```bash
-   ./scripts/download-model.sh small
-   ```
+**Accessibility resets after rebuild**
 
-### Hotkey Not Working
+This is expected. Each build creates a new code signature. Use the pre-built DMG for persistent permissions, or re-grant after each build during development.
 
-1. Check accessibility permissions:
-   ```bash
-   ./scripts/grant-permissions.sh
-   ```
-
-2. Ensure LocalFlow is toggled ON in the list
-
-3. Try restarting LocalFlow:
-   ```bash
-   pkill LocalFlow
-   open /Applications/LocalFlow.app
-   ```
-
-### No Sound/Recording
-
-1. Check microphone permissions in System Settings > Privacy & Security > Microphone
-2. Ensure LocalFlow is listed and enabled
-3. Test your microphone in another app
-
-## Getting Help
+### Getting Help
 
 - [GitHub Issues](https://github.com/laurenschristian/local-flow/issues)
-- Check existing issues before creating new ones
-- Include macOS version, chip type, and error messages
