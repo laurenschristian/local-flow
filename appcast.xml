@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>LocalFlow Updates</title>
+        <link>https://raw.githubusercontent.com/laurenschristian/local-flow/main/appcast.xml</link>
+        <description>Updates for LocalFlow</description>
+        <language>en</language>
+        <item>
+            <title>Version 0.2.0</title>
+            <pubDate>Sun, 28 Dec 2025 16:18:53 -0600</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/laurenschristian/local-flow/releases/download/v0.2.0/LocalFlow-v0.2.0-mac-arm64.dmg"
+                       type="application/octet-stream"
+                       sparkle:edSignature="OIcO/A86UiXMDtaXjegEpyNONOfZEPQgLCJ+O3UomASTN0Cnjd7K72V++MoAecRbb9D0eejJLEJMGg80JH8nDg=="
+                       length="2301066"/>
+        </item>
+    </channel>
+</rss>
