@@ -5,23 +5,24 @@ class TextInserter {
     private let pasteboard = NSPasteboard.general
 
     func insertText(_ text: String, clipboardOnly: Bool = false) {
-        if clipboardOnly {
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-            return
-        }
-
-        let savedContents = saveClipboard()
+        print("[TextInserter] Inserting text: \(text.prefix(50))... (clipboardOnly: \(clipboardOnly))")
 
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.simulatePaste()
+        if clipboardOnly {
+            print("[TextInserter] Clipboard only mode - done")
+            return
+        }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.restoreClipboard(savedContents)
-            }
+        // Check if we have accessibility permission
+        guard AXIsProcessTrusted() else {
+            print("[TextInserter] ERROR: No accessibility permission - cannot paste")
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.simulatePaste()
         }
     }
 
@@ -48,26 +49,27 @@ class TextInserter {
     }
 
     private func simulatePaste() {
-        // Create key down event for 'V' with Command modifier
-        let vKeyCode: CGKeyCode = 9 // 'V' key
+        print("[TextInserter] Simulating Cmd+V paste...")
 
-        guard let keyDownEvent = CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: vKeyCode,
-            keyDown: true
-        ) else { return }
+        let vKeyCode: CGKeyCode = 9
 
-        keyDownEvent.flags = .maskCommand
-        keyDownEvent.post(tap: .cghidEventTap)
+        guard let source = CGEventSource(stateID: .hidSystemState) else {
+            print("[TextInserter] ERROR: Failed to create event source")
+            return
+        }
 
-        // Create key up event
-        guard let keyUpEvent = CGEvent(
-            keyboardEventSource: nil,
-            virtualKey: vKeyCode,
-            keyDown: false
-        ) else { return }
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
+            print("[TextInserter] ERROR: Failed to create key events")
+            return
+        }
 
-        keyUpEvent.flags = .maskCommand
-        keyUpEvent.post(tap: .cghidEventTap)
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+
+        keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        keyUp.post(tap: .cgAnnotatedSessionEventTap)
+
+        print("[TextInserter] Paste events posted")
     }
 }
