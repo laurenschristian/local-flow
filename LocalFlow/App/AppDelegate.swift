@@ -18,6 +18,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = Settings.shared
 
     private var onboardingWindow: NSWindow?
+    private var settingsWindow: NSWindow?
+    private var liveTranscriptionTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupServices()
@@ -200,8 +202,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
+        if let window = settingsWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settingsView = SettingsView()
+        let hostingController = NSHostingController(rootView: settingsView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "LocalFlow Settings"
+        window.styleMask = [.titled, .closable]
+        window.center()
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+
+        settingsWindow = window
     }
 
     @objc private func checkForUpdates() {
@@ -261,6 +277,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         RecordingOverlayController.shared.show()
         RecordingOverlayController.shared.updateStatus(.recording)
         audioRecorder.startRecording()
+        startLiveTranscription()
+    }
+
+    private func startLiveTranscription() {
+        liveTranscriptionTask?.cancel()
+        liveTranscriptionTask = Task {
+            // Wait a bit before first transcription to accumulate audio
+            try? await Task.sleep(for: .seconds(1.5))
+
+            while !Task.isCancelled && AppState.shared.status == .recording {
+                if let samples = audioRecorder.getCurrentSamples(), samples.count > 16000 { // At least 1 second
+                    // Run transcription in background
+                    let result = await whisperService.transcribe(audioData: samples, onSegment: nil)
+                    if case .success(let text) = result, !text.isEmpty {
+                        await MainActor.run {
+                            RecordingOverlayController.shared.updatePartialText(text)
+                        }
+                    }
+                }
+                try? await Task.sleep(for: .seconds(1.0))
+            }
+        }
     }
 
     private func stopRecordingAndTranscribe() {
@@ -268,6 +306,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("[LocalFlow] Cannot stop - not recording")
             return
         }
+
+        // Stop live transcription
+        liveTranscriptionTask?.cancel()
+        liveTranscriptionTask = nil
 
         if settings.soundFeedback {
             stopSound?.play()
@@ -288,7 +330,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("[LocalFlow] Got \(audioData.count) audio samples, transcribing...")
 
         Task {
-            let result = await whisperService.transcribe(audioData: audioData)
+            // Reload model if it was unloaded due to idle timeout
+            if await !whisperService.modelLoaded {
+                print("[LocalFlow] Reloading model...")
+                await MainActor.run {
+                    AppState.shared.status = .loading
+                }
+                let loaded = await whisperService.loadModel(path: settings.modelPath)
+                if !loaded {
+                    await MainActor.run {
+                        RecordingOverlayController.shared.hide()
+                        AppState.shared.status = .error(.modelLoadFailed)
+                    }
+                    return
+                }
+            }
+
+            await MainActor.run {
+                AppState.shared.status = .transcribing
+            }
+
+            let result = await whisperService.transcribe(audioData: audioData, onSegment: nil)
 
             await MainActor.run {
                 RecordingOverlayController.shared.hide()

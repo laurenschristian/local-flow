@@ -102,6 +102,12 @@ class AudioRecorder {
         recordedSamples.append(contentsOf: UnsafeBufferPointer(start: channelData, count: frameCount))
     }
 
+    /// Get current samples without stopping (for live transcription)
+    func getCurrentSamples() -> [Float]? {
+        guard !recordedSamples.isEmpty else { return nil }
+        return recordedSamples
+    }
+
     func stopRecording() -> [Float]? {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
