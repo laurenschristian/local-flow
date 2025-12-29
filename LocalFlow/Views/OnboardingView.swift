@@ -33,6 +33,7 @@ struct OnboardingView: View {
         .frame(width: 520, height: 440)
         .onAppear {
             checkPermissions()
+            skipToRelevantStep()
         }
         .onDisappear {
             permissionCheckTimer?.invalidate()
@@ -364,6 +365,22 @@ struct OnboardingView: View {
     private func checkPermissions() {
         accessibilityGranted = AXIsProcessTrusted()
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
+    private func skipToRelevantStep() {
+        // If user already completed onboarding before, skip to the first missing step
+        let wasCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
+        guard wasCompleted else { return }
+
+        if !accessibilityGranted {
+            currentStep = 1  // Accessibility step
+        } else if !microphoneGranted {
+            currentStep = 2  // Microphone step
+        } else if !settings.hasAnyModel() {
+            currentStep = 3  // Model step
+        } else {
+            currentStep = 4  // Ready step
+        }
     }
 
     private func startPermissionPolling() {

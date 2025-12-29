@@ -42,18 +42,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let completed = UserDefaults.standard.bool(forKey: "onboardingCompleted")
         if !completed { return true }
 
-        // Also show if permissions were revoked (e.g., after update)
+        // Check if critical permissions are missing (e.g., after update)
         let hasAccessibility = AXIsProcessTrusted()
-        let hasMicrophone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         let hasModel = settings.hasAnyModel()
 
-        if !hasAccessibility || !hasMicrophone {
-            // Permissions revoked - reset onboarding flag to show setup again
-            UserDefaults.standard.set(false, forKey: "onboardingCompleted")
+        // Only re-show onboarding if accessibility is missing (required for hotkey)
+        // Don't reset the flag - just show the flow to fix the missing permission
+        if !hasAccessibility || !hasModel {
             return true
         }
 
-        return !hasModel
+        return false
     }
 
     private func showOnboarding() {
