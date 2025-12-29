@@ -38,6 +38,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("[LocalFlow] App launched - double-tap \(settings.triggerKey.displayName) to record")
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Clean up whisper context synchronously before C++ statics are destroyed
+        // This prevents the ggml_metal_rsets_free assertion failure
+        hotkeyManager?.stopMonitoring()
+        liveTranscriptionTask?.cancel()
+
+        // Synchronously unload the model to free Metal resources properly
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            await whisperService?.unloadModel()
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 2.0)
+    }
+
     private func shouldShowOnboarding() -> Bool {
         let completed = UserDefaults.standard.bool(forKey: "onboardingCompleted")
         if !completed { return true }
