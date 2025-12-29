@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import UniformTypeIdentifiers
+import ApplicationServices
 
 struct SettingsView: View {
     @ObservedObject private var settings = Settings.shared
@@ -8,6 +9,7 @@ struct SettingsView: View {
     @State private var selectedTab: SettingsTab = .general
     @State private var accessibilityGranted = false
     @State private var microphoneGranted = false
+    @State private var permissionTimer: Timer?
     @Environment(\.colorScheme) private var colorScheme
 
     enum SettingsTab: String, CaseIterable {
@@ -46,6 +48,22 @@ struct SettingsView: View {
         }
         .frame(width: 680, height: 520)
         .onAppear {
+            checkPermissions()
+            startPermissionPolling()
+        }
+        .onDisappear {
+            permissionTimer?.invalidate()
+        }
+    }
+
+    private func checkPermissions() {
+        accessibilityGranted = AXIsProcessTrusted()
+        microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
+    private func startPermissionPolling() {
+        permissionTimer?.invalidate()
+        permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             accessibilityGranted = AXIsProcessTrusted()
             microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         }
@@ -533,7 +551,9 @@ struct SettingsView: View {
     }
 
     private func openAccessibilitySettings() {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        // Trigger native macOS accessibility permission dialog
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     private func openMicrophoneSettings() {
@@ -746,7 +766,7 @@ struct PermissionRow: View {
                         .foregroundColor(.green)
                 }
             } else {
-                Button("Grant Access", action: action)
+                Button("Request Access", action: action)
                     .buttonStyle(.borderedProminent)
                     .tint(AppStyle.Colors.brand)
                     .controlSize(.small)
