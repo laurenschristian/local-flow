@@ -20,10 +20,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var liveTranscriptionTask: Task<Void, Never>?
+    private var soundsObserver: NSObjectProtocol?
+    private var activeAppBundleId: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupServices()
         setupSounds()
+        setupSoundsObserver()
         setupMenuBar()
 
         if shouldShowOnboarding() {
@@ -134,11 +137,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupSounds() {
-        if let startURL = Bundle.main.url(forResource: "start", withExtension: "wav") {
+        // Try custom sounds first, fall back to bundled sounds
+        if let customPath = settings.customStartSoundPath,
+           FileManager.default.fileExists(atPath: customPath) {
+            startSound = NSSound(contentsOfFile: customPath, byReference: true)
+        } else if let startURL = Bundle.main.url(forResource: "start", withExtension: "wav") {
             startSound = NSSound(contentsOf: startURL, byReference: true)
         }
-        if let stopURL = Bundle.main.url(forResource: "stop", withExtension: "wav") {
+
+        if let customPath = settings.customStopSoundPath,
+           FileManager.default.fileExists(atPath: customPath) {
+            stopSound = NSSound(contentsOfFile: customPath, byReference: true)
+        } else if let stopURL = Bundle.main.url(forResource: "stop", withExtension: "wav") {
             stopSound = NSSound(contentsOf: stopURL, byReference: true)
+        }
+    }
+
+    func reloadSounds() {
+        setupSounds()
+    }
+
+    private func setupSoundsObserver() {
+        soundsObserver = NotificationCenter.default.addObserver(
+            forName: .customSoundsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reloadSounds()
         }
     }
 
@@ -160,6 +185,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let modelItem = NSMenuItem(title: "Model: \(settings.selectedModel.shortName)", action: nil, keyEquivalent: "")
         modelItem.tag = 2
         menu.addItem(modelItem)
+
+        // Stats
+        let statsItem = NSMenuItem(title: "Words today: 0", action: nil, keyEquivalent: "")
+        statsItem.tag = 3
+        menu.addItem(statsItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -199,6 +229,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let statusItem = menu.item(withTag: 1) {
             statusItem.title = appState.status.displayText
         }
+        if let statsItem = menu.item(withTag: 3) {
+            statsItem.title = "Words today: \(settings.wordsTranscribedToday)"
+        }
     }
 
     @objc private func openSettings() {
@@ -235,8 +268,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.stopRecordingAndTranscribe()
         }
 
+        hotkeyManager.onTripleTap = { [weak self] in
+            self?.quickRepaste()
+        }
+
         hotkeyManager.startMonitoring()
         print("[LocalFlow] Hotkey monitoring started")
+    }
+
+    private func quickRepaste() {
+        let lastText = AppState.shared.lastTranscription
+        guard !lastText.isEmpty else {
+            print("[LocalFlow] Triple-tap: No previous transcription to re-paste")
+            return
+        }
+
+        print("[LocalFlow] Triple-tap: Re-pasting last transcription")
+        textInserter.insertText(lastText, clipboardOnly: settings.clipboardMode)
     }
 
     private func loadModel() {
@@ -249,9 +297,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("[LocalFlow] Loading model from: \(modelPath)")
             let success = await whisperService.loadModel(path: modelPath)
 
+            if success {
+                await warmupModel()
+            }
+
             await MainActor.run {
                 if success {
-                    print("[LocalFlow] Model loaded successfully")
+                    print("[LocalFlow] Model loaded and ready")
                     AppState.shared.status = .idle
                 } else {
                     print("[LocalFlow] Failed to load model")
@@ -261,10 +313,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func warmupModel() async {
+        // Run a quick transcription with minimal audio to prime the model
+        // This makes the first real transcription faster
+        let sampleRate = 16000
+        let duration = 0.1 // 100ms of silence
+        let sampleCount = Int(Double(sampleRate) * duration)
+        let silentAudio = [Float](repeating: 0.0, count: sampleCount)
+
+        print("[LocalFlow] Warming up model...")
+        _ = await whisperService.transcribe(audioData: silentAudio, onSegment: nil)
+        print("[LocalFlow] Model warmup complete")
+    }
+
     private func startRecording() {
         guard AppState.shared.status == .idle else {
             print("[LocalFlow] Cannot start recording - status is \(AppState.shared.status)")
             return
+        }
+
+        // Capture the frontmost app for app-specific profiles
+        activeAppBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        if let bundleId = activeAppBundleId {
+            print("[LocalFlow] Recording for app: \(bundleId)")
         }
 
         if settings.soundFeedback {
@@ -359,21 +430,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 case .success(var text):
                     print("[LocalFlow] Transcription: \(text)")
                     if !text.isEmpty {
-                        if settings.punctuationMode {
-                            text = addPunctuation(text)
+                        let effective = self.effectiveSettings()
+
+                        if effective.punctuation {
+                            text = self.addPunctuation(text)
                         }
 
+                        if effective.summary {
+                            text = self.formatAsSummary(text)
+                        }
+
+                        // Track stats
+                        let wordCount = text.split(separator: " ").count
+                        self.settings.addWordsToStats(wordCount)
+
                         AppState.shared.lastTranscription = text
-                        settings.addToHistory(text)
-                        textInserter.insertText(text, clipboardOnly: settings.clipboardMode)
+                        self.settings.addToHistory(text)
+                        self.textInserter.insertText(text, clipboardOnly: effective.clipboard)
                     }
                     AppState.shared.status = .idle
+                    self.activeAppBundleId = nil
                 case .failure(let error):
                     print("[LocalFlow] Transcription error: \(error)")
                     AppState.shared.status = .error(.transcriptionFailed)
                 }
             }
         }
+    }
+
+    private func effectiveSettings() -> (punctuation: Bool, clipboard: Bool, summary: Bool) {
+        if let bundleId = activeAppBundleId,
+           let profile = settings.profileForApp(bundleId) {
+            return (profile.punctuationMode, profile.clipboardMode, profile.summaryMode)
+        }
+        return (settings.punctuationMode, settings.clipboardMode, settings.summaryModeEnabled)
     }
 
     private func addPunctuation(_ text: String) -> String {
@@ -390,6 +480,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return result
+    }
+
+    private func formatAsSummary(_ text: String) -> String {
+        let sentences = text
+            .replacingOccurrences(of: "? ", with: "?|")
+            .replacingOccurrences(of: ". ", with: ".|")
+            .replacingOccurrences(of: "! ", with: "!|")
+            .components(separatedBy: "|")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if sentences.count <= 1 {
+            return text
+        }
+
+        return sentences.map { "• \($0)" }.joined(separator: "\n")
     }
 
     private func updateMenuBarIcon(recording: Bool) {
