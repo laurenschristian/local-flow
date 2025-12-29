@@ -23,6 +23,12 @@ enum WhisperError: Error, LocalizedError {
 actor WhisperService {
     private var context: OpaquePointer?
     private var isModelLoaded: Bool = false
+    private var lastUsedTime: Date = Date()
+    private var idleUnloadTask: Task<Void, Never>?
+
+    private static let idleTimeout: TimeInterval = 300 // 5 minutes
+
+    var modelLoaded: Bool { isModelLoaded }
 
     func loadModel(path: String) async -> Bool {
         guard FileManager.default.fileExists(atPath: path) else {
@@ -50,11 +56,41 @@ actor WhisperService {
 
         context = ctx
         isModelLoaded = true
+        lastUsedTime = Date()
+        startIdleTimer()
         print("Model loaded successfully")
         return true
     }
 
+    private func startIdleTimer() {
+        idleUnloadTask?.cancel()
+        idleUnloadTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard let self = self else { return }
+                let shouldUnload = await self.checkIdleTimeout()
+                if shouldUnload {
+                    await self.unloadModel()
+                    return
+                }
+            }
+        }
+    }
+
+    private func checkIdleTimeout() -> Bool {
+        let elapsed = Date().timeIntervalSince(lastUsedTime)
+        if elapsed > Self.idleTimeout && isModelLoaded {
+            print("[WhisperService] Unloading model after \(Int(elapsed))s idle")
+            return true
+        }
+        return false
+    }
+
     func transcribe(audioData: [Float]) async -> Result<String, WhisperError> {
+        await transcribe(audioData: audioData, onSegment: nil)
+    }
+
+    func transcribe(audioData: [Float], onSegment: ((String) -> Void)?) async -> Result<String, WhisperError> {
         guard isModelLoaded, let ctx = context else {
             return .failure(.modelNotLoaded)
         }
@@ -62,6 +98,8 @@ actor WhisperService {
         guard !audioData.isEmpty else {
             return .failure(.invalidAudioData)
         }
+
+        lastUsedTime = Date()
 
         // Set up transcription parameters
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
@@ -86,13 +124,21 @@ actor WhisperService {
             return .failure(.transcriptionFailed("whisper_full returned \(result)"))
         }
 
-        // Extract transcription
+        // Extract transcription with streaming callbacks
         let segmentCount = whisper_full_n_segments(ctx)
         var transcription = ""
 
         for i in 0..<segmentCount {
             if let text = whisper_full_get_segment_text(ctx, i) {
-                transcription += String(cString: text)
+                let segment = String(cString: text)
+                transcription += segment
+                // Call the segment callback on main thread
+                if let callback = onSegment {
+                    let currentText = transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+                    DispatchQueue.main.async {
+                        callback(currentText)
+                    }
+                }
             }
         }
 
@@ -100,11 +146,14 @@ actor WhisperService {
     }
 
     func unloadModel() {
+        idleUnloadTask?.cancel()
+        idleUnloadTask = nil
         if let ctx = context {
             whisper_free(ctx)
             context = nil
         }
         isModelLoaded = false
+        print("[WhisperService] Model unloaded")
     }
 
     deinit {
