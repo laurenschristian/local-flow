@@ -296,11 +296,11 @@ struct SettingsView: View {
                         Spacer()
                         Text("\(Int(settings.doubleTapInterval * 1000))ms")
                             .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(AppStyle.Colors.brand)
+                            .foregroundColor(AppStyle.Colors.adaptiveAccent(for: colorScheme))
                     }
 
                     Slider(value: $settings.doubleTapInterval, in: 0.2...0.5, step: 0.05)
-                        .tint(AppStyle.Colors.brand)
+                        .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
 
                     Text("Lower = faster taps required")
                         .font(.system(size: 11))
@@ -364,11 +364,11 @@ struct SettingsView: View {
                     VStack(spacing: 20) {
                         ZStack {
                             Circle()
-                                .fill(AppStyle.Colors.brand.opacity(0.1))
+                                .fill(AppStyle.Colors.adaptiveAccent(for: colorScheme).opacity(0.1))
                                 .frame(width: 64, height: 64)
                             Image(systemName: "app.badge")
                                 .font(.system(size: 28))
-                                .foregroundColor(AppStyle.Colors.brand)
+                                .foregroundColor(AppStyle.Colors.adaptiveAccent(for: colorScheme))
                         }
 
                         VStack(spacing: 6) {
@@ -385,7 +385,7 @@ struct SettingsView: View {
                                 .font(.system(size: 13, weight: .semibold))
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(AppStyle.Colors.brand)
+                        .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
@@ -440,11 +440,11 @@ struct SettingsView: View {
                     VStack(spacing: 20) {
                         ZStack {
                             Circle()
-                                .fill(AppStyle.Colors.brand.opacity(0.1))
+                                .fill(AppStyle.Colors.adaptiveAccent(for: colorScheme).opacity(0.1))
                                 .frame(width: 64, height: 64)
                             Image(systemName: "clock")
                                 .font(.system(size: 28))
-                                .foregroundColor(AppStyle.Colors.brand)
+                                .foregroundColor(AppStyle.Colors.adaptiveAccent(for: colorScheme))
                         }
 
                         VStack(spacing: 6) {
@@ -517,15 +517,30 @@ struct SettingsView: View {
 
             Spacer()
 
-            Link(destination: URL(string: "https://github.com/laurenschristian/local-flow")!) {
-                HStack(spacing: 6) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 12))
-                    Text("Star on GitHub")
-                        .font(.system(size: 13, weight: .medium))
+            VStack(spacing: 12) {
+                Button {
+                    UpdateController.shared.checkForUpdates()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 12))
+                        Text("Check for Updates")
+                            .font(.system(size: 13, weight: .medium))
+                    }
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
+
+                Link(destination: URL(string: "https://github.com/laurenschristian/local-flow")!) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 12))
+                        Text("Star on GitHub")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
 
             Spacer()
         }
@@ -678,6 +693,7 @@ struct SidebarNavButton: View {
 }
 
 struct SectionHeader: View {
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     let icon: String
 
@@ -685,7 +701,7 @@ struct SectionHeader: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(AppStyle.Colors.brand)
+                .foregroundColor(AppStyle.Colors.adaptiveAccent(for: colorScheme))
             Text(title)
                 .font(.system(size: 14, weight: .bold))
         }
@@ -702,7 +718,7 @@ struct HintCard: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isError ? .red : AppStyle.Colors.brand)
+                .foregroundColor(isError ? .red : AppStyle.Colors.adaptiveAccent(for: colorScheme))
 
             Text(text)
                 .font(.system(size: 12))
@@ -714,19 +730,20 @@ struct HintCard: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(isError
                     ? Color.red.opacity(colorScheme == .dark ? 0.15 : 0.1)
-                    : AppStyle.Colors.brand.opacity(colorScheme == .dark ? 0.15 : 0.08))
+                    : (colorScheme == .dark ? Color.white.opacity(0.08) : AppStyle.Colors.brand.opacity(0.08)))
         )
     }
 }
 
 struct SettingsToggle: View {
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     let description: String
     @Binding var isOn: Bool
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
                 Text(description)
@@ -735,11 +752,13 @@ struct SettingsToggle: View {
             }
         }
         .toggleStyle(.switch)
-        .tint(AppStyle.Colors.brand)
+        .controlSize(.small)
+        .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
     }
 }
 
 struct PermissionRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     let description: String
     let isGranted: Bool
@@ -768,7 +787,7 @@ struct PermissionRow: View {
             } else {
                 Button("Request Access", action: action)
                     .buttonStyle(.borderedProminent)
-                    .tint(AppStyle.Colors.brand)
+                    .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
                     .controlSize(.small)
             }
         }
@@ -787,14 +806,14 @@ struct TriggerKeyOption: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(isSelected
-                            ? AppStyle.Colors.brand
+                            ? AppStyle.Colors.adaptiveAccent(for: colorScheme)
                             : (colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)))
                         .frame(width: 24, height: 24)
 
                     if isSelected {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(colorScheme == .dark ? .black : .white)
                     }
                 }
 
@@ -825,14 +844,14 @@ struct ModelOptionRow: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .fill(isSelected
-                                ? AppStyle.Colors.brand
+                                ? AppStyle.Colors.adaptiveAccent(for: colorScheme)
                                 : (colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)))
                             .frame(width: 24, height: 24)
 
                         if isSelected {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(colorScheme == .dark ? .black : .white)
                         }
                     }
                     .opacity(isDownloaded ? 1 : 0.4)
@@ -873,7 +892,7 @@ struct ModelOptionRow: View {
             } else if isDownloading {
                 ProgressView(value: progress)
                     .frame(width: 80)
-                    .tint(AppStyle.Colors.brand)
+                    .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
             } else {
                 Button("Download", action: onDownload)
                     .font(.system(size: 12, weight: .medium))
@@ -933,6 +952,7 @@ struct SoundPickerRow: View {
 }
 
 struct AppProfileRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let bundleId: String
     let profile: AppProfile
     let onUpdate: (AppProfile) -> Void
@@ -985,21 +1005,24 @@ struct AppProfileRow: View {
                         set: { onUpdate(AppProfile(punctuationMode: $0, clipboardMode: profile.clipboardMode, summaryMode: profile.summaryMode)) }
                     ))
                     .toggleStyle(.switch)
-                    .tint(AppStyle.Colors.brand)
+                    .controlSize(.small)
+                    .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
 
                     Toggle("Clipboard only", isOn: Binding(
                         get: { profile.clipboardMode },
                         set: { onUpdate(AppProfile(punctuationMode: profile.punctuationMode, clipboardMode: $0, summaryMode: profile.summaryMode)) }
                     ))
                     .toggleStyle(.switch)
-                    .tint(AppStyle.Colors.brand)
+                    .controlSize(.small)
+                    .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
 
                     Toggle("Summary mode", isOn: Binding(
                         get: { profile.summaryMode },
                         set: { onUpdate(AppProfile(punctuationMode: profile.punctuationMode, clipboardMode: profile.clipboardMode, summaryMode: $0)) }
                     ))
                     .toggleStyle(.switch)
-                    .tint(AppStyle.Colors.brand)
+                    .controlSize(.small)
+                    .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
 
                     Button("Remove Profile", role: .destructive, action: onDelete)
                         .font(.system(size: 12))
