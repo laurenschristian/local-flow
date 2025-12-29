@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var selectedTab: SettingsTab = .general
     @State private var accessibilityGranted = false
     @State private var microphoneGranted = false
+    @Environment(\.colorScheme) private var colorScheme
 
     enum SettingsTab: String, CaseIterable {
         case general = "General"
@@ -31,90 +32,115 @@ struct SettingsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Sidebar
+            // Gradient glass sidebar
             sidebar
-                .frame(width: 180)
+                .frame(width: 200)
 
-            // Content
+            // Content area
             ScrollView {
                 contentView
-                    .padding(24)
+                    .padding(28)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(AppStyle.Colors.windowBackground)
         }
-        .frame(width: 640, height: 480)
+        .frame(width: 680, height: 520)
         .onAppear {
             accessibilityGranted = AXIsProcessTrusted()
             microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         }
     }
 
+    // MARK: - Sidebar
+
     private var sidebar: some View {
-        VStack(spacing: 4) {
-            // App branding
-            VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(AppStyle.Colors.brand)
-                        .frame(width: 48, height: 48)
-                    Image(systemName: "waveform")
-                        .font(.system(size: 20, weight: .semibold))
+        ZStack {
+            // Glass background
+            SidebarGlassBackground()
+
+            VStack(spacing: 0) {
+                // App branding
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 56, height: 56)
+
+                        Image(systemName: "waveform")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+
+                    Text("LocalFlow")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+
+                    // Status pill
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(accessibilityGranted && microphoneGranted ? Color.green : Color.orange)
+                            .frame(width: 8, height: 8)
+                        Text(accessibilityGranted && microphoneGranted ? "Ready" : "Setup needed")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(.white.opacity(0.1))
+                    )
                 }
+                .padding(.top, 24)
+                .padding(.bottom, 20)
 
-                Text("LocalFlow")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                // Divider
+                Rectangle()
+                    .fill(.white.opacity(0.15))
+                    .frame(height: 1)
+                    .padding(.horizontal, 20)
 
-                // Permissions status
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(accessibilityGranted && microphoneGranted ? Color.green : Color.orange)
-                        .frame(width: 8, height: 8)
-                    Text(accessibilityGranted && microphoneGranted ? "Ready" : "Setup needed")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.top, 20)
-            .padding(.bottom, 16)
-
-            Divider()
-                .padding(.horizontal, 16)
-
-            // Navigation items
-            VStack(spacing: 2) {
-                ForEach(SettingsTab.allCases, id: \.self) { tab in
-                    SidebarButton(
-                        title: tab.rawValue,
-                        icon: tab.icon,
-                        isSelected: selectedTab == tab
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            selectedTab = tab
+                // Navigation
+                VStack(spacing: 4) {
+                    ForEach(SettingsTab.allCases, id: \.self) { tab in
+                        SidebarNavButton(
+                            title: tab.rawValue,
+                            icon: tab.icon,
+                            isSelected: selectedTab == tab
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedTab = tab
+                            }
                         }
                     }
                 }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
 
-            Spacer()
+                Spacer()
 
-            // Stats at bottom
-            VStack(spacing: 4) {
-                Text("\(settings.wordsTranscribedToday)")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundColor(AppStyle.Colors.brand)
-                Text("words today")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                // Stats footer
+                VStack(spacing: 4) {
+                    Text("\(settings.wordsTranscribedToday)")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Text("words today")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                .padding(.bottom, 24)
             }
-            .padding(.bottom, 20)
         }
-        .frame(maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
     }
+
+    // MARK: - Content
 
     @ViewBuilder
     private var contentView: some View {
@@ -137,10 +163,10 @@ struct SettingsView: View {
     // MARK: - General
 
     private var generalContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 24) {
             SectionHeader(title: "Permissions", icon: "lock.shield.fill")
 
-            SettingsCard {
+            GlassCard {
                 PermissionRow(
                     title: "Accessibility",
                     description: "Detect hotkey and insert text",
@@ -148,7 +174,7 @@ struct SettingsView: View {
                     action: openAccessibilitySettings
                 )
 
-                Divider().padding(.vertical, 8)
+                CardDivider()
 
                 PermissionRow(
                     title: "Microphone",
@@ -160,14 +186,14 @@ struct SettingsView: View {
 
             SectionHeader(title: "Transcription", icon: "text.bubble.fill")
 
-            SettingsCard {
+            GlassCard {
                 SettingsToggle(
                     title: "Auto-punctuation",
                     description: "Add periods and capitalize sentences",
                     isOn: $settings.punctuationMode
                 )
 
-                Divider().padding(.vertical, 8)
+                CardDivider()
 
                 SettingsToggle(
                     title: "Clipboard only",
@@ -175,7 +201,7 @@ struct SettingsView: View {
                     isOn: $settings.clipboardMode
                 )
 
-                Divider().padding(.vertical, 8)
+                CardDivider()
 
                 SettingsToggle(
                     title: "Summary mode",
@@ -186,7 +212,7 @@ struct SettingsView: View {
 
             SectionHeader(title: "Sound & Startup", icon: "speaker.wave.2.fill")
 
-            SettingsCard {
+            GlassCard {
                 SettingsToggle(
                     title: "Sound effects",
                     description: "Play sounds when recording",
@@ -194,20 +220,20 @@ struct SettingsView: View {
                 )
 
                 if settings.soundFeedback {
-                    Divider().padding(.vertical, 8)
+                    CardDivider()
 
-                    SoundPickerRowStyled(
+                    SoundPickerRow(
                         label: "Start sound",
                         path: $settings.customStartSoundPath
                     )
 
-                    SoundPickerRowStyled(
+                    SoundPickerRow(
                         label: "Stop sound",
                         path: $settings.customStopSoundPath
                     )
                 }
 
-                Divider().padding(.vertical, 8)
+                CardDivider()
 
                 SettingsToggle(
                     title: "Launch at login",
@@ -221,11 +247,11 @@ struct SettingsView: View {
     // MARK: - Hotkey
 
     private var hotkeyContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 24) {
             SectionHeader(title: "Trigger Key", icon: "command")
 
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 12) {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 14) {
                     ForEach(TriggerKey.allCases) { key in
                         TriggerKeyOption(
                             key: key,
@@ -244,14 +270,14 @@ struct SettingsView: View {
 
             SectionHeader(title: "Timing", icon: "timer")
 
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 12) {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 14) {
                     HStack {
                         Text("Double-tap speed")
                             .font(.system(size: 13, weight: .medium))
                         Spacer()
                         Text("\(Int(settings.doubleTapInterval * 1000))ms")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
                             .foregroundColor(AppStyle.Colors.brand)
                     }
 
@@ -260,7 +286,7 @@ struct SettingsView: View {
 
                     Text("Lower = faster taps required")
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -269,11 +295,11 @@ struct SettingsView: View {
     // MARK: - Model
 
     private var modelContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            SectionHeader(title: "Active Model", icon: "cpu.fill")
+        VStack(alignment: .leading, spacing: 24) {
+            SectionHeader(title: "Whisper Model", icon: "cpu.fill")
 
-            SettingsCard {
-                VStack(spacing: 12) {
+            GlassCard {
+                VStack(spacing: 0) {
                     ForEach(WhisperModel.allCases) { model in
                         ModelOptionRow(
                             model: model,
@@ -292,7 +318,7 @@ struct SettingsView: View {
                         )
 
                         if model != WhisperModel.allCases.last {
-                            Divider()
+                            CardDivider()
                         }
                     }
                 }
@@ -312,39 +338,46 @@ struct SettingsView: View {
     // MARK: - Apps
 
     private var appsContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 24) {
             SectionHeader(title: "App-Specific Settings", icon: "app.badge.fill")
 
             if settings.appProfiles.isEmpty {
-                SettingsCard {
-                    VStack(spacing: 16) {
-                        Image(systemName: "app.badge")
-                            .font(.system(size: 40))
-                            .foregroundColor(.secondary)
+                GlassCard {
+                    VStack(spacing: 20) {
+                        ZStack {
+                            Circle()
+                                .fill(AppStyle.Colors.brand.opacity(0.1))
+                                .frame(width: 64, height: 64)
+                            Image(systemName: "app.badge")
+                                .font(.system(size: 28))
+                                .foregroundColor(AppStyle.Colors.brand)
+                        }
 
-                        Text("No app profiles yet")
-                            .font(.system(size: 14, weight: .medium))
+                        VStack(spacing: 6) {
+                            Text("No app profiles yet")
+                                .font(.system(size: 15, weight: .semibold))
 
-                        Text("Create custom settings for specific apps")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                            Text("Create custom settings for specific apps")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
 
                         Button(action: showAppPicker) {
                             Label("Add App Profile", systemImage: "plus")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: 13, weight: .semibold))
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(AppStyle.Colors.brand)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                    .padding(.vertical, 24)
                 }
             } else {
-                SettingsCard {
+                GlassCard {
                     VStack(spacing: 0) {
                         ForEach(Array(settings.appProfiles.keys.sorted()), id: \.self) { bundleId in
                             if let profile = settings.appProfiles[bundleId] {
-                                AppProfileRowStyled(
+                                AppProfileRow(
                                     bundleId: bundleId,
                                     profile: profile,
                                     onUpdate: { settings.setProfile($0, forApp: bundleId) },
@@ -352,7 +385,7 @@ struct SettingsView: View {
                                 )
 
                                 if bundleId != settings.appProfiles.keys.sorted().last {
-                                    Divider().padding(.vertical, 8)
+                                    CardDivider()
                                 }
                             }
                         }
@@ -371,7 +404,7 @@ struct SettingsView: View {
     // MARK: - History
 
     private var historyContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 24) {
             HStack {
                 SectionHeader(title: "Recent Transcriptions", icon: "clock.fill")
                 Spacer()
@@ -379,36 +412,43 @@ struct SettingsView: View {
                     Button("Clear All") {
                         settings.clearHistory()
                     }
-                    .font(.system(size: 12))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.red)
                 }
             }
 
             if settings.transcriptionHistory.isEmpty {
-                SettingsCard {
-                    VStack(spacing: 16) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 40))
-                            .foregroundColor(.secondary)
+                GlassCard {
+                    VStack(spacing: 20) {
+                        ZStack {
+                            Circle()
+                                .fill(AppStyle.Colors.brand.opacity(0.1))
+                                .frame(width: 64, height: 64)
+                            Image(systemName: "clock")
+                                .font(.system(size: 28))
+                                .foregroundColor(AppStyle.Colors.brand)
+                        }
 
-                        Text("No transcriptions yet")
-                            .font(.system(size: 14, weight: .medium))
+                        VStack(spacing: 6) {
+                            Text("No transcriptions yet")
+                                .font(.system(size: 15, weight: .semibold))
 
-                        Text("Your recent transcriptions will appear here")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                            Text("Your recent transcriptions will appear here")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                    .padding(.vertical, 24)
                 }
             } else {
-                SettingsCard {
+                GlassCard {
                     VStack(spacing: 0) {
                         ForEach(settings.transcriptionHistory.prefix(10)) { entry in
-                            HistoryRowStyled(entry: entry)
+                            HistoryRow(entry: entry)
 
                             if entry.id != settings.transcriptionHistory.prefix(10).last?.id {
-                                Divider().padding(.vertical, 8)
+                                CardDivider()
                             }
                         }
                     }
@@ -423,9 +463,10 @@ struct SettingsView: View {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
 
-        return VStack(spacing: 24) {
+        return VStack(spacing: 28) {
             Spacer()
 
+            // Logo with glow
             ZStack {
                 Circle()
                     .fill(
@@ -435,36 +476,38 @@ struct SettingsView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 80, height: 80)
+                    .frame(width: 88, height: 88)
+                    .shadow(color: AppStyle.Colors.brand.opacity(0.5), radius: 24, y: 8)
 
                 Image(systemName: "waveform")
-                    .font(.system(size: 32, weight: .semibold))
+                    .font(.system(size: 36, weight: .semibold))
                     .foregroundColor(.white)
             }
-            .shadow(color: AppStyle.Colors.brand.opacity(0.4), radius: 20, y: 10)
 
             VStack(spacing: 8) {
                 Text("LocalFlow")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
 
                 Text("Version \(version) (Build \(build))")
                     .font(.system(size: 13))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             Text("Local voice dictation powered by Whisper")
                 .font(.system(size: 14))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
 
             Spacer()
 
-            HStack(spacing: 16) {
-                Link(destination: URL(string: "https://github.com/laurenschristian/local-flow")!) {
-                    Label("GitHub", systemImage: "link")
-                        .font(.system(size: 12, weight: .medium))
+            Link(destination: URL(string: "https://github.com/laurenschristian/local-flow")!) {
+                HStack(spacing: 6) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 12))
+                    Text("Star on GitHub")
+                        .font(.system(size: 13, weight: .medium))
                 }
-                .buttonStyle(.bordered)
             }
+            .buttonStyle(.bordered)
 
             Spacer()
         }
@@ -498,9 +541,95 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Components
+// MARK: - Glass Components
 
-struct SidebarButton: View {
+struct SidebarGlassBackground: View {
+    var body: some View {
+        ZStack {
+            // Gradient base
+            LinearGradient(
+                colors: [
+                    AppStyle.Colors.brand,
+                    AppStyle.Colors.brand.opacity(0.9)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Noise texture overlay
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.1)
+
+            // Edge highlight
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [.white.opacity(0.15), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 1)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+struct GlassCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(colorScheme == .dark
+                    ? Color.white.opacity(0.06)
+                    : Color.white.opacity(0.8))
+                .background {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .opacity(colorScheme == .dark ? 0.5 : 0.3)
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: colorScheme == .dark
+                            ? [.white.opacity(0.2), .white.opacity(0.05), .clear]
+                            : [.black.opacity(0.1), .black.opacity(0.05), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+        .shadow(
+            color: colorScheme == .dark ? .black.opacity(0.3) : .black.opacity(0.08),
+            radius: colorScheme == .dark ? 8 : 4,
+            y: colorScheme == .dark ? 4 : 2
+        )
+    }
+}
+
+struct CardDivider: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Rectangle()
+            .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08))
+            .frame(height: 1)
+            .padding(.vertical, 12)
+    }
+}
+
+struct SidebarNavButton: View {
     let title: String
     let icon: String
     let isSelected: Bool
@@ -508,21 +637,21 @@ struct SidebarButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 20)
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 22)
                 Text(title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? AppStyle.Colors.brand : Color.clear)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? .white.opacity(0.2) : .clear)
             )
-            .foregroundColor(isSelected ? .white : .primary)
+            .foregroundColor(.white.opacity(isSelected ? 1 : 0.75))
         }
         .buttonStyle(.plain)
     }
@@ -538,33 +667,13 @@ struct SectionHeader: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(AppStyle.Colors.brand)
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14, weight: .bold))
         }
-    }
-}
-
-struct SettingsCard<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            content
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-        )
     }
 }
 
 struct HintCard: View {
+    @Environment(\.colorScheme) private var colorScheme
     let icon: String
     let text: String
     var isError: Bool = false
@@ -572,18 +681,20 @@ struct HintCard: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundColor(isError ? .red : AppStyle.Colors.brand)
 
             Text(text)
                 .font(.system(size: 12))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isError ? Color.red.opacity(0.1) : AppStyle.Colors.brand.opacity(0.05))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isError
+                    ? Color.red.opacity(colorScheme == .dark ? 0.15 : 0.1)
+                    : AppStyle.Colors.brand.opacity(colorScheme == .dark ? 0.15 : 0.08))
         )
     }
 }
@@ -595,12 +706,12 @@ struct SettingsToggle: View {
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
                 Text(description)
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
         }
         .toggleStyle(.switch)
@@ -616,22 +727,26 @@ struct PermissionRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
                 Text(description)
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
 
             if isGranted {
-                Label("Granted", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.green)
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Granted")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.green)
+                }
             } else {
-                Button("Grant", action: action)
+                Button("Grant Access", action: action)
                     .buttonStyle(.borderedProminent)
                     .tint(AppStyle.Colors.brand)
                     .controlSize(.small)
@@ -641,16 +756,19 @@ struct PermissionRow: View {
 }
 
 struct TriggerKeyOption: View {
+    @Environment(\.colorScheme) private var colorScheme
     let key: TriggerKey
     let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(isSelected ? AppStyle.Colors.brand : Color(nsColor: .quaternaryLabelColor))
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isSelected
+                            ? AppStyle.Colors.brand
+                            : (colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)))
                         .frame(width: 24, height: 24)
 
                     if isSelected {
@@ -662,7 +780,6 @@ struct TriggerKeyOption: View {
 
                 Text(key.displayName)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(.primary)
 
                 Spacer()
             }
@@ -672,6 +789,7 @@ struct TriggerKeyOption: View {
 }
 
 struct ModelOptionRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let model: WhisperModel
     let isSelected: Bool
     let isDownloaded: Bool
@@ -683,10 +801,12 @@ struct ModelOptionRow: View {
     var body: some View {
         HStack {
             Button(action: onSelect) {
-                HStack {
+                HStack(spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(isSelected ? AppStyle.Colors.brand : Color(nsColor: .quaternaryLabelColor))
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(isSelected
+                                ? AppStyle.Colors.brand
+                                : (colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)))
                             .frame(width: 24, height: 24)
 
                         if isSelected {
@@ -695,16 +815,25 @@ struct ModelOptionRow: View {
                                 .foregroundColor(.white)
                         }
                     }
-                    .opacity(isDownloaded ? 1 : 0.3)
+                    .opacity(isDownloaded ? 1 : 0.4)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(model.shortName)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(isDownloaded ? .primary : .secondary)
+                            .foregroundStyle(isDownloaded ? .primary : .secondary)
 
-                        Text(model.qualityLabel)
-                            .font(.system(size: 11))
-                            .foregroundColor(model.qualityColor)
+                        HStack(spacing: 6) {
+                            Text(model.qualityLabel)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(model.qualityColor)
+
+                            Text("•")
+                                .foregroundStyle(.tertiary)
+
+                            Text(formatSize(model.fileSize))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -714,9 +843,13 @@ struct ModelOptionRow: View {
             Spacer()
 
             if isDownloaded {
-                Label("Downloaded", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 11))
-                    .foregroundColor(.green)
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Ready")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.green)
+                }
             } else if isDownloading {
                 ProgressView(value: progress)
                     .frame(width: 80)
@@ -729,9 +862,15 @@ struct ModelOptionRow: View {
             }
         }
     }
+
+    private func formatSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
 }
 
-struct SoundPickerRowStyled: View {
+struct SoundPickerRow: View {
     let label: String
     @Binding var path: String?
 
@@ -745,7 +884,7 @@ struct SoundPickerRowStyled: View {
             if let path = path {
                 Text(URL(fileURLWithPath: path).lastPathComponent)
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                 Button("Reset") {
@@ -769,11 +908,11 @@ struct SoundPickerRowStyled: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 }
 
-struct AppProfileRowStyled: View {
+struct AppProfileRow: View {
     let bundleId: String
     let profile: AppProfile
     let onUpdate: (AppProfile) -> Void
@@ -798,13 +937,13 @@ struct AppProfileRowStyled: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Button(action: { withAnimation { isExpanded.toggle() } }) {
-                HStack {
+        VStack(spacing: 14) {
+            Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } }) {
+                HStack(spacing: 12) {
                     if let icon = appIcon {
                         Image(nsImage: icon)
                             .resizable()
-                            .frame(width: 28, height: 28)
+                            .frame(width: 32, height: 32)
                     }
 
                     Text(appName)
@@ -814,13 +953,13 @@ struct AppProfileRowStyled: View {
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
             .buttonStyle(.plain)
 
             if isExpanded {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     Toggle("Auto-punctuation", isOn: Binding(
                         get: { profile.punctuationMode },
                         set: { onUpdate(AppProfile(punctuationMode: $0, clipboardMode: profile.clipboardMode, summaryMode: profile.summaryMode)) }
@@ -846,15 +985,16 @@ struct AppProfileRowStyled: View {
                         .font(.system(size: 12))
                         .foregroundColor(.red)
                         .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.top, 4)
                 }
                 .font(.system(size: 12))
-                .padding(.leading, 36)
+                .padding(.leading, 44)
             }
         }
     }
 }
 
-struct HistoryRowStyled: View {
+struct HistoryRow: View {
     let entry: TranscriptionEntry
 
     var body: some View {
@@ -865,14 +1005,16 @@ struct HistoryRowStyled: View {
 
             Text(entry.timestamp, style: .relative)
                 .font(.system(size: 11))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .contextMenu {
-            Button("Copy") {
+            Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(entry.text, forType: .string)
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
             }
         }
     }

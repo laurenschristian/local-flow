@@ -11,6 +11,13 @@ enum AppStyle {
         /// Hex: #001847 | RGB: 0, 24, 71
         static let brand = Color(red: 0, green: 0.094, blue: 0.278)
 
+        /// Brand gradient for backgrounds
+        static let brandGradient = LinearGradient(
+            colors: [brand, brand.opacity(0.85)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
         /// Accent color for interactive elements and indicators
         /// Used for recording indicator, buttons, highlights
         static let accent = Color.red
@@ -27,6 +34,13 @@ enum AppStyle {
         /// Border/stroke colors
         static let borderLight = Color.white.opacity(0.4)
         static let borderSubtle = Color.white.opacity(0.15)
+
+        /// Adaptive colors for light/dark mode
+        static let cardBackground = Color(nsColor: .controlBackgroundColor)
+        static let windowBackground = Color(nsColor: .windowBackgroundColor)
+        static let separator = Color(nsColor: .separatorColor)
+        static let secondaryLabel = Color(nsColor: .secondaryLabelColor)
+        static let tertiaryLabel = Color(nsColor: .tertiaryLabelColor)
     }
 
     // MARK: - Typography
