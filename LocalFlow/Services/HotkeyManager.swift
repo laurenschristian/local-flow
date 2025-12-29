@@ -10,8 +10,11 @@ class HotkeyManager {
     private var runLoopSource: CFRunLoopSource?
     private var tapTimes: [Date] = []
     private var isHolding: Bool = false
+    private var holdStartTime: Date?
     private var triggerKeyObserver: NSObjectProtocol?
     private var tripleTapPending: Bool = false
+    private var healthCheckTimer: Timer?
+    private let maxHoldDuration: TimeInterval = 300 // 5 minutes max recording
 
     private var doubleTapThreshold: TimeInterval {
         Settings.shared.doubleTapInterval
@@ -67,9 +70,48 @@ class HotkeyManager {
         ) { [weak self] _ in
             print("[HotkeyManager] Trigger key changed to \(self?.currentTriggerKey.displayName ?? "unknown")")
         }
+
+        // Health check timer - re-enables tap if macOS disabled it
+        healthCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.ensureTapEnabled()
+        }
+    }
+
+    private func ensureTapEnabled() {
+        guard let tap = eventTap else { return }
+
+        // Check for stuck holding state (exceeded max duration)
+        if isHolding, let startTime = holdStartTime {
+            if Date().timeIntervalSince(startTime) > maxHoldDuration {
+                print("[HotkeyManager] Hold exceeded max duration - forcing release")
+                isHolding = false
+                holdStartTime = nil
+                DispatchQueue.main.async { [weak self] in
+                    self?.onKeyUp?()
+                }
+            }
+        }
+
+        if !CGEvent.tapIsEnabled(tap: tap) {
+            print("[HotkeyManager] Event tap was disabled - re-enabling...")
+            CGEvent.tapEnable(tap: tap, enable: true)
+            // Reset state since we may have missed key release events
+            if isHolding {
+                print("[HotkeyManager] Resetting stuck isHolding state")
+                isHolding = false
+                holdStartTime = nil
+                DispatchQueue.main.async { [weak self] in
+                    self?.onKeyUp?()
+                }
+            }
+            tapTimes.removeAll()
+        }
     }
 
     func stopMonitoring() {
+        healthCheckTimer?.invalidate()
+        healthCheckTimer = nil
+
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
@@ -85,6 +127,9 @@ class HotkeyManager {
         eventTap = nil
         runLoopSource = nil
         triggerKeyObserver = nil
+        isHolding = false
+        holdStartTime = nil
+        tapTimes.removeAll()
         print("[HotkeyManager] Monitoring stopped")
     }
 
@@ -94,8 +139,19 @@ class HotkeyManager {
         event: CGEvent
     ) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            print("[HotkeyManager] Event tap disabled by \(type == .tapDisabledByTimeout ? "timeout" : "user input") - re-enabling...")
             if let tap = eventTap {
                 CGEvent.tapEnable(tap: tap, enable: true)
+            }
+            // Reset state since we may have missed events
+            let wasHolding = isHolding
+            isHolding = false
+            holdStartTime = nil
+            tapTimes.removeAll()
+            if wasHolding {
+                DispatchQueue.main.async { [weak self] in
+                    self?.onKeyUp?()
+                }
             }
             return Unmanaged.passUnretained(event)
         }
@@ -125,6 +181,7 @@ class HotkeyManager {
                     // Double-tap: start recording (hold to continue)
                     print("[HotkeyManager] DOUBLE-TAP DETECTED!")
                     isHolding = true
+                    holdStartTime = Date()
                     tapTimes.removeAll()
                     DispatchQueue.main.async { [weak self] in
                         self?.onDoubleTap?()
@@ -133,6 +190,7 @@ class HotkeyManager {
             } else if !isKeyPressed && isHolding {
                 print("[HotkeyManager] Key released - stopping")
                 isHolding = false
+                holdStartTime = nil
                 DispatchQueue.main.async { [weak self] in
                     self?.onKeyUp?()
                 }
