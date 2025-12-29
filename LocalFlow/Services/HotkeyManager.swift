@@ -4,12 +4,14 @@ import Carbon
 class HotkeyManager {
     var onDoubleTap: (() -> Void)?
     var onKeyUp: (() -> Void)?
+    var onTripleTap: (() -> Void)?  // Quick re-paste
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var lastKeyPressTime: Date?
+    private var tapTimes: [Date] = []
     private var isHolding: Bool = false
     private var triggerKeyObserver: NSObjectProtocol?
+    private var tripleTapPending: Bool = false
 
     private var doubleTapThreshold: TimeInterval {
         Settings.shared.doubleTapInterval
@@ -100,22 +102,33 @@ class HotkeyManager {
 
         if type == .flagsChanged {
             let flags = event.flags
-            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
             let isKeyPressed = isModifierKeyPressed(flags: flags, triggerKey: currentTriggerKey)
 
             if isKeyPressed && !isHolding {
                 let now = Date()
 
-                if let lastPress = lastKeyPressTime,
-                   now.timeIntervalSince(lastPress) < doubleTapThreshold {
+                // Clean up old taps outside the threshold window
+                tapTimes = tapTimes.filter { now.timeIntervalSince($0) < doubleTapThreshold * 2 }
+                tapTimes.append(now)
+
+                // Count recent taps within threshold
+                let recentTaps = tapTimes.filter { now.timeIntervalSince($0) < doubleTapThreshold }
+
+                if recentTaps.count >= 3 {
+                    // Triple-tap: quick re-paste (no hold needed)
+                    print("[HotkeyManager] TRIPLE-TAP DETECTED!")
+                    tapTimes.removeAll()
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onTripleTap?()
+                    }
+                } else if recentTaps.count == 2 {
+                    // Double-tap: start recording (hold to continue)
                     print("[HotkeyManager] DOUBLE-TAP DETECTED!")
                     isHolding = true
-                    lastKeyPressTime = nil
+                    tapTimes.removeAll()
                     DispatchQueue.main.async { [weak self] in
                         self?.onDoubleTap?()
                     }
-                } else {
-                    lastKeyPressTime = now
                 }
             } else if !isKeyPressed && isHolding {
                 print("[HotkeyManager] Key released - stopping")

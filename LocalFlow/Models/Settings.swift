@@ -144,6 +144,41 @@ class Settings: ObservableObject {
         }
     }
 
+    // Stats
+    @Published var wordsTranscribedToday: Int {
+        didSet {
+            defaults.set(wordsTranscribedToday, forKey: "wordsTranscribedToday")
+            defaults.set(Date(), forKey: "statsDate")
+        }
+    }
+
+    // Custom sounds
+    @Published var customStartSoundPath: String? {
+        didSet {
+            defaults.set(customStartSoundPath, forKey: "customStartSoundPath")
+        }
+    }
+
+    @Published var customStopSoundPath: String? {
+        didSet {
+            defaults.set(customStopSoundPath, forKey: "customStopSoundPath")
+        }
+    }
+
+    // App-specific profiles
+    @Published var appProfiles: [String: AppProfile] {
+        didSet {
+            saveAppProfiles()
+        }
+    }
+
+    // Summary mode
+    @Published var summaryModeEnabled: Bool {
+        didSet {
+            defaults.set(summaryModeEnabled, forKey: "summaryModeEnabled")
+        }
+    }
+
     var modelPath: String {
         let modelsDir = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -176,6 +211,50 @@ class Settings: ObservableObject {
         self.soundFeedback = defaults.object(forKey: "soundFeedback") as? Bool ?? true
         self.launchAtLogin = defaults.bool(forKey: "launchAtLogin")
         self.transcriptionHistory = Self.loadHistory()
+
+        // Load stats (reset if new day)
+        let statsDate = defaults.object(forKey: "statsDate") as? Date ?? Date.distantPast
+        if Calendar.current.isDateInToday(statsDate) {
+            self.wordsTranscribedToday = defaults.integer(forKey: "wordsTranscribedToday")
+        } else {
+            self.wordsTranscribedToday = 0
+        }
+
+        // Custom sounds
+        self.customStartSoundPath = defaults.string(forKey: "customStartSoundPath")
+        self.customStopSoundPath = defaults.string(forKey: "customStopSoundPath")
+
+        // App profiles
+        self.appProfiles = Self.loadAppProfiles()
+
+        // Summary mode
+        self.summaryModeEnabled = defaults.bool(forKey: "summaryModeEnabled")
+    }
+
+    func addWordsToStats(_ count: Int) {
+        wordsTranscribedToday += count
+    }
+
+    func profileForApp(_ bundleId: String) -> AppProfile? {
+        appProfiles[bundleId]
+    }
+
+    func setProfile(_ profile: AppProfile, forApp bundleId: String) {
+        appProfiles[bundleId] = profile
+    }
+
+    private func saveAppProfiles() {
+        if let data = try? JSONEncoder().encode(appProfiles) {
+            defaults.set(data, forKey: "appProfiles")
+        }
+    }
+
+    private static func loadAppProfiles() -> [String: AppProfile] {
+        guard let data = UserDefaults.standard.data(forKey: "appProfiles"),
+              let profiles = try? JSONDecoder().decode([String: AppProfile].self, from: data) else {
+            return [:]
+        }
+        return profiles
     }
 
     func isModelDownloaded(_ model: WhisperModel) -> Bool {
@@ -242,8 +321,21 @@ struct TranscriptionEntry: Identifiable, Codable {
     }
 }
 
+struct AppProfile: Codable, Equatable {
+    var punctuationMode: Bool
+    var clipboardMode: Bool
+    var summaryMode: Bool
+
+    static let `default` = AppProfile(
+        punctuationMode: false,
+        clipboardMode: false,
+        summaryMode: false
+    )
+}
+
 extension Notification.Name {
     static let triggerKeyChanged = Notification.Name("triggerKeyChanged")
+    static let customSoundsChanged = Notification.Name("customSoundsChanged")
 }
 
 private extension Double {
