@@ -70,7 +70,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Welcome to LocalFlow"
         window.styleMask = [.titled, .closable]
-        window.center()
+
+        // Set size first, then center
+        window.setContentSize(NSSize(width: 520, height: 440))
+        if let screen = NSScreen.main {
+            let screenFrame = screen.visibleFrame
+            let windowFrame = window.frame
+            let x = screenFrame.midX - windowFrame.width / 2
+            let y = screenFrame.midY - windowFrame.height / 2
+            window.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 

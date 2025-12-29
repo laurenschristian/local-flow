@@ -63,15 +63,24 @@ info "Creating DMG..."
 # Use create-dmg for a professional DMG with icon
 if command -v create-dmg &> /dev/null; then
     rm -f "$DMG_PATH"
+
+    # Use custom background if available
+    BACKGROUND_ARGS=""
+    if [ -f "$PROJECT_DIR/resources/dmg-background.png" ]; then
+        BACKGROUND_ARGS="--background $PROJECT_DIR/resources/dmg-background.png"
+    fi
+
     create-dmg \
         --volname "$APP_NAME" \
         --volicon "$PROJECT_DIR/LocalFlow/Assets.xcassets/AppIcon.appiconset/icon_512.png" \
+        $BACKGROUND_ARGS \
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 100 \
         --icon "$APP_NAME.app" 150 190 \
         --hide-extension "$APP_NAME.app" \
         --app-drop-link 450 190 \
+        --text-size 14 \
         "$DMG_PATH" \
         "$BUILD_DIR/$APP_NAME.app" \
         2>/dev/null || true

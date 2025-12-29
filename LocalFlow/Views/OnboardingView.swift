@@ -4,6 +4,7 @@ import ApplicationServices
 
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var currentStep = 0
     @State private var accessibilityGranted = false
     @State private var microphoneGranted = false
@@ -75,7 +76,7 @@ struct OnboardingView: View {
                 withAnimation(.easeInOut(duration: 0.25)) { currentStep = 1 }
             }
             .buttonStyle(.borderedProminent)
-            .tint(AppStyle.Colors.brand)
+            .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
             .controlSize(.large)
 
             Spacer().frame(height: 40)
@@ -122,7 +123,7 @@ struct OnboardingView: View {
                         requestAccessibilityPermission()
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(AppStyle.Colors.brand)
+                    .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
                     .controlSize(.large)
 
                     // Help text for updates
@@ -155,7 +156,7 @@ struct OnboardingView: View {
                     withAnimation(.easeInOut(duration: 0.25)) { currentStep = 2 }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppStyle.Colors.brand)
+                .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
                 .disabled(!accessibilityGranted)
             }
 
@@ -176,12 +177,12 @@ struct OnboardingView: View {
 
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.15))
+                    .fill(AppStyle.Colors.adaptiveAccent(for: colorScheme).opacity(0.15))
                     .frame(width: 80, height: 80)
 
                 Image(systemName: "mic.circle.fill")
                     .font(.system(size: 44))
-                    .foregroundColor(.blue)
+                    .foregroundColor(AppStyle.Colors.adaptiveAccent(for: colorScheme))
             }
 
             VStack(spacing: 8) {
@@ -208,7 +209,7 @@ struct OnboardingView: View {
                     requestMicrophonePermission()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppStyle.Colors.brand)
+                .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
                 .controlSize(.large)
             }
 
@@ -225,7 +226,7 @@ struct OnboardingView: View {
                     withAnimation(.easeInOut(duration: 0.25)) { currentStep = 3 }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppStyle.Colors.brand)
+                .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
                 .disabled(!microphoneGranted)
             }
 
@@ -240,12 +241,12 @@ struct OnboardingView: View {
 
             ZStack {
                 Circle()
-                    .fill(Color.purple.opacity(0.15))
+                    .fill(AppStyle.Colors.adaptiveAccent(for: colorScheme).opacity(0.15))
                     .frame(width: 80, height: 80)
 
                 Image(systemName: "cpu.fill")
                     .font(.system(size: 44))
-                    .foregroundColor(.purple)
+                    .foregroundColor(AppStyle.Colors.adaptiveAccent(for: colorScheme))
             }
 
             VStack(spacing: 8) {
@@ -268,7 +269,7 @@ struct OnboardingView: View {
                     VStack(spacing: 14) {
                         ProgressView(value: modelDownloader.progress)
                             .frame(width: 220)
-                            .tint(AppStyle.Colors.brand)
+                            .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
 
                         Text("Downloading Base model... \(Int(modelDownloader.progress * 100))%")
                             .font(.system(size: 13))
@@ -286,7 +287,7 @@ struct OnboardingView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(AppStyle.Colors.brand)
+                    .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
                     .controlSize(.large)
 
                     if let error = modelDownloader.error {
@@ -310,7 +311,7 @@ struct OnboardingView: View {
                     withAnimation(.easeInOut(duration: 0.25)) { currentStep = 4 }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppStyle.Colors.brand)
+                .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
                 .disabled(!settings.hasAnyModel())
             }
 
@@ -350,7 +351,7 @@ struct OnboardingView: View {
                 onComplete()
             }
             .buttonStyle(.borderedProminent)
-            .tint(AppStyle.Colors.brand)
+            .tint(AppStyle.Colors.adaptiveTint(for: colorScheme))
             .controlSize(.large)
 
             Spacer().frame(height: 40)
@@ -406,6 +407,7 @@ struct OnboardingView: View {
 }
 
 struct InstructionRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let icon: String
     let text: String
 
@@ -413,7 +415,7 @@ struct InstructionRow: View {
         HStack(spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundColor(AppStyle.Colors.brand)
+                .foregroundColor(AppStyle.Colors.adaptiveAccent(for: colorScheme))
                 .frame(width: 24)
 
             Text(text)

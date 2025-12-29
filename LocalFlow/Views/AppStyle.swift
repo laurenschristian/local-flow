@@ -41,6 +41,16 @@ enum AppStyle {
         static let separator = Color(nsColor: .separatorColor)
         static let secondaryLabel = Color(nsColor: .secondaryLabelColor)
         static let tertiaryLabel = Color(nsColor: .tertiaryLabelColor)
+
+        /// Adaptive accent - brand in light mode, white in dark mode
+        static func adaptiveAccent(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark ? .white : brand
+        }
+
+        /// Adaptive tint for toggles/controls
+        static func adaptiveTint(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark ? .white.opacity(0.9) : brand
+        }
     }
 
     // MARK: - Typography
