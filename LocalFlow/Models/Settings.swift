@@ -4,10 +4,10 @@ import ServiceManagement
 import SwiftUI
 
 enum WhisperModel: String, CaseIterable, Identifiable {
-    case tiny = "ggml-tiny.en.bin"
-    case base = "ggml-base.en.bin"
-    case small = "ggml-small.en.bin"
-    case medium = "ggml-medium.en.bin"
+    case tiny = "ggml-tiny.bin"
+    case base = "ggml-base.bin"
+    case small = "ggml-small.bin"
+    case medium = "ggml-medium.bin"
 
     var id: String { rawValue }
 
@@ -15,7 +15,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         switch self {
         case .tiny: return "Tiny (75MB) - Fastest"
         case .base: return "Base (142MB) - Fast"
-        case .small: return "Small (466MB) - Recommended"
+        case .small: return "Small (488MB) - Recommended"
         case .medium: return "Medium (1.5GB) - Accurate"
         }
     }
@@ -56,9 +56,71 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         switch self {
         case .tiny: return 75_000_000
         case .base: return 142_000_000
-        case .small: return 466_000_000
+        case .small: return 488_000_000
         case .medium: return 1_500_000_000
         }
+    }
+
+    /// The old English-only filename for migration detection
+    var legacyEnglishFilename: String {
+        rawValue.replacingOccurrences(of: ".bin", with: ".en.bin")
+    }
+}
+
+enum TranscriptionLanguage: String, CaseIterable, Identifiable {
+    case auto = "auto"
+    case en = "en"
+    case nl = "nl"
+    case de = "de"
+    case fr = "fr"
+    case es = "es"
+    case it = "it"
+    case pt = "pt"
+    case pl = "pl"
+    case uk = "uk"
+    case ru = "ru"
+    case ja = "ja"
+    case ko = "ko"
+    case zh = "zh"
+    case ar = "ar"
+    case hi = "hi"
+    case tr = "tr"
+    case sv = "sv"
+    case da = "da"
+    case no = "no"
+    case fi = "fi"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .auto: return "Auto-detect"
+        case .en: return "English"
+        case .nl: return "Dutch"
+        case .de: return "German"
+        case .fr: return "French"
+        case .es: return "Spanish"
+        case .it: return "Italian"
+        case .pt: return "Portuguese"
+        case .pl: return "Polish"
+        case .uk: return "Ukrainian"
+        case .ru: return "Russian"
+        case .ja: return "Japanese"
+        case .ko: return "Korean"
+        case .zh: return "Chinese"
+        case .ar: return "Arabic"
+        case .hi: return "Hindi"
+        case .tr: return "Turkish"
+        case .sv: return "Swedish"
+        case .da: return "Danish"
+        case .no: return "Norwegian"
+        case .fi: return "Finnish"
+        }
+    }
+
+    /// The language code to pass to whisper, or nil for auto-detect
+    var whisperCode: String? {
+        self == .auto ? nil : rawValue
     }
 }
 
@@ -179,6 +241,13 @@ class Settings: ObservableObject {
         }
     }
 
+    // Language
+    @Published var language: TranscriptionLanguage {
+        didSet {
+            defaults.set(language.rawValue, forKey: "language")
+        }
+    }
+
     var modelPath: String {
         let modelsDir = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -202,8 +271,8 @@ class Settings: ObservableObject {
         let savedModel = defaults.string(forKey: "selectedModel") ?? WhisperModel.small.rawValue
         self.selectedModel = WhisperModel(rawValue: savedModel) ?? .small
 
-        let savedTriggerKey = defaults.string(forKey: "triggerKey") ?? TriggerKey.option.rawValue
-        self.triggerKey = TriggerKey(rawValue: savedTriggerKey) ?? .option
+        let savedTriggerKey = defaults.string(forKey: "triggerKey") ?? TriggerKey.fn.rawValue
+        self.triggerKey = TriggerKey(rawValue: savedTriggerKey) ?? .fn
 
         self.doubleTapInterval = defaults.double(forKey: "doubleTapInterval").nonZero ?? 0.3
         self.punctuationMode = defaults.bool(forKey: "punctuationMode")
@@ -229,6 +298,38 @@ class Settings: ObservableObject {
 
         // Summary mode
         self.summaryModeEnabled = defaults.bool(forKey: "summaryModeEnabled")
+
+        // Language
+        let savedLanguage = defaults.string(forKey: "language") ?? TranscriptionLanguage.auto.rawValue
+        self.language = TranscriptionLanguage(rawValue: savedLanguage) ?? .auto
+
+        // Migrate from English-only model selection
+        migrateFromEnglishModels()
+    }
+
+    private func migrateFromEnglishModels() {
+        // If user had an English-only model selected, map to multilingual equivalent
+        let savedModel = defaults.string(forKey: "selectedModel") ?? ""
+        let legacyMap: [String: WhisperModel] = [
+            "ggml-tiny.en.bin": .tiny,
+            "ggml-base.en.bin": .base,
+            "ggml-small.en.bin": .small,
+            "ggml-medium.en.bin": .medium,
+        ]
+        if let mapped = legacyMap[savedModel] {
+            selectedModel = mapped
+        }
+    }
+
+    /// Whether a legacy English-only model exists that can be cleaned up
+    func hasLegacyModel(_ model: WhisperModel) -> Bool {
+        let path = modelsDirectory.appendingPathComponent(model.legacyEnglishFilename).path
+        return FileManager.default.fileExists(atPath: path)
+    }
+
+    func deleteLegacyModel(_ model: WhisperModel) {
+        let path = modelsDirectory.appendingPathComponent(model.legacyEnglishFilename).path
+        try? FileManager.default.removeItem(atPath: path)
     }
 
     func addWordsToStats(_ count: Int) {

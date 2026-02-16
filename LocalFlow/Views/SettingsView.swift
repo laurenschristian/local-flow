@@ -202,6 +202,30 @@ struct SettingsView: View {
                 )
             }
 
+            SectionHeader(title: "Language", icon: "globe")
+
+            GlassCard {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Transcription language")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("Language spoken in your recordings")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Picker("", selection: $settings.language) {
+                        ForEach(TranscriptionLanguage.allCases) { lang in
+                            Text(lang.displayName).tag(lang)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 160)
+                }
+            }
+
             SectionHeader(title: "Transcription", icon: "text.bubble.fill")
 
             GlassCard {
@@ -346,9 +370,16 @@ struct SettingsView: View {
                 HintCard(icon: "exclamationmark.triangle.fill", text: error, isError: true)
             }
 
+            if WhisperModel.allCases.contains(where: { settings.hasLegacyModel($0) }) {
+                HintCard(
+                    icon: "arrow.triangle.2.circlepath",
+                    text: "Models have been updated to support multiple languages. Please download the new multilingual model to continue. Old English-only models can be safely removed."
+                )
+            }
+
             HintCard(
                 icon: "info.circle.fill",
-                text: "Larger models are more accurate but slower. Small is recommended for most users."
+                text: "Larger models are more accurate but slower. Small is recommended for most users. All models support 99+ languages."
             )
         }
     }

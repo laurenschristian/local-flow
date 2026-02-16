@@ -112,10 +112,18 @@ actor WhisperService {
         params.suppress_blank = true
         params.suppress_nst = true
 
-        // Run transcription with English language
-        let result = "en".withCString { langPtr in
-            params.language = langPtr
-            return audioData.withUnsafeBufferPointer { buffer in
+        // Run transcription with selected language (nil = auto-detect)
+        let languageCode = await MainActor.run { Settings.shared.language.whisperCode }
+        let result: Int32
+        if let langCode = languageCode {
+            result = langCode.withCString { langPtr in
+                params.language = langPtr
+                return audioData.withUnsafeBufferPointer { buffer in
+                    whisper_full(ctx, params, buffer.baseAddress, Int32(audioData.count))
+                }
+            }
+        } else {
+            result = audioData.withUnsafeBufferPointer { buffer in
                 whisper_full(ctx, params, buffer.baseAddress, Int32(audioData.count))
             }
         }
