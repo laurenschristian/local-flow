@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup whisper.cpp
+        run: ./scripts/setup-whisper.sh
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build release
+        run: |
+          mkdir -p build
+          xcodebuild -project LocalFlow.xcodeproj \
+            -scheme LocalFlow \
+            -configuration Release \
+            -arch arm64 \
+            build \
+            CONFIGURATION_BUILD_DIR="$(pwd)/build" \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tail -5
+          test -d "build/LocalFlow.app" || exit 1
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" LocalFlow/Info.plist)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DMG_NAME="LocalFlow-v${VERSION}-mac-arm64.dmg"
+
+          # Create DMG with hdiutil
+          DMG_TEMP="build/dmg_temp"
+          mkdir -p "$DMG_TEMP"
+          cp -R build/LocalFlow.app "$DMG_TEMP/"
+          ln -s /Applications "$DMG_TEMP/Applications"
+          hdiutil create -volname "LocalFlow" \
+            -srcfolder "$DMG_TEMP" \
+            -ov -format UDZO \
+            "build/$DMG_NAME"
+          rm -rf "$DMG_TEMP"
+          echo "DMG_PATH=build/$DMG_NAME" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "${{ github.ref_name }}" \
+            "$DMG_PATH" \
+            --title "LocalFlow v${VERSION}" \
+            --generate-notes
