@@ -34,6 +34,9 @@ vendor/
 ._*
 .Trash-*
 
+# Claude Code
+.claude/
+
 # IDE
 .idea/
 *.swp
