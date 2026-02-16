@@ -10,10 +10,10 @@ MODELS_DIR="${HOME}/Library/Application Support/LocalFlow/Models"
 BASE_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 
 case "$MODEL" in
-    tiny)   MODEL_FILE="ggml-tiny.en.bin" ;;
-    base)   MODEL_FILE="ggml-base.en.bin" ;;
-    small)  MODEL_FILE="ggml-small.en.bin" ;;
-    medium) MODEL_FILE="ggml-medium.en.bin" ;;
+    tiny)   MODEL_FILE="ggml-tiny.bin" ;;
+    base)   MODEL_FILE="ggml-base.bin" ;;
+    small)  MODEL_FILE="ggml-small.bin" ;;
+    medium) MODEL_FILE="ggml-medium.bin" ;;
     *)
         echo "Unknown model: $MODEL"
         echo "Available models: tiny, base, small, medium"

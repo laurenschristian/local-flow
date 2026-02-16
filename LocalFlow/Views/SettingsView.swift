@@ -192,6 +192,18 @@ struct SettingsView: View {
                     action: openAccessibilitySettings
                 )
 
+                if !accessibilityGranted {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11))
+                            .foregroundColor(.orange)
+                        Text("Open System Settings > Privacy & Security > Accessibility, then toggle LocalFlow ON. Permissions reset if the app is rebuilt without consistent code signing.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+
                 CardDivider()
 
                 PermissionRow(

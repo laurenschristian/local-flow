@@ -1,48 +1,92 @@
 #!/bin/bash
-# Instructions for setting up code signing for persistent permissions
-#
-# macOS ties accessibility permissions to the app's code signature.
-# Without consistent signing, permissions reset on each rebuild.
-#
-# OPTIONS:
-#
-# 1. EASIEST: Don't rebuild often
-#    - Build once with ./scripts/build-and-install.sh
-#    - Grant permissions once, they persist until next rebuild
-#
-# 2. FOR DEVELOPERS with Apple Developer Account:
-#    - Open LocalFlow.xcodeproj in Xcode
-#    - Set your Team in Signing & Capabilities
-#    - Build from Xcode or use: xcodebuild -configuration Release
-#
-# 3. CREATE A SELF-SIGNED CERTIFICATE (manual steps):
-#    a) Open Keychain Access
-#    b) Menu: Keychain Access > Certificate Assistant > Create a Certificate
-#    c) Name: "LocalFlow Development"
-#    d) Identity Type: Self-Signed Root
-#    e) Certificate Type: Code Signing
-#    f) Click Create
-#    g) Find the certificate, right-click > Get Info
-#    h) Expand Trust, set Code Signing to "Always Trust"
-#    i) Rebuild with ./scripts/build-and-install.sh
-#
-# After creating the certificate, the build script will automatically use it.
+set -e
 
-echo "=== LocalFlow Code Signing Setup ==="
+# Create a self-signed code signing certificate for persistent accessibility permissions.
+# macOS ties accessibility permissions to code signature — without consistent signing,
+# permissions reset on every rebuild.
+
+CERT_NAME="LocalFlow Development"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info() { echo -e "${GREEN}[✓]${NC} $1"; }
+warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+
+# Check if certificate already exists
+if security find-identity -v -p codesigning 2>&1 | grep -q "$CERT_NAME"; then
+    info "Certificate '$CERT_NAME' already exists"
+    echo ""
+    echo "Your build scripts will automatically use this certificate."
+    echo "Accessibility permissions will persist across rebuilds."
+    exit 0
+fi
+
+echo ""
+echo "  Creating self-signed code signing certificate"
+echo "  ──────────────────────────────────────────────"
+echo ""
+echo "  This creates a certificate called '$CERT_NAME' in your keychain."
+echo "  It allows accessibility permissions to persist across rebuilds."
 echo ""
 
-# Check for any signing identity
-IDENTITIES=$(security find-identity -v -p codesigning 2>&1)
-if echo "$IDENTITIES" | grep -q "valid identit"; then
-    echo "Found signing identities:"
-    echo "$IDENTITIES"
+# Create certificate using security command
+# This uses a temporary cert config
+CERT_CONFIG=$(mktemp)
+cat > "$CERT_CONFIG" << 'EOF'
+[ req ]
+default_bits       = 2048
+distinguished_name = req_dn
+prompt             = no
+[ req_dn ]
+CN = LocalFlow Development
+[ v3_code_signing ]
+keyUsage = digitalSignature
+extendedKeyUsage = codeSigning
+EOF
+
+TEMP_KEY=$(mktemp)
+TEMP_CERT=$(mktemp)
+TEMP_P12=$(mktemp)
+
+# Generate key and cert
+openssl req -x509 -newkey rsa:2048 -keyout "$TEMP_KEY" -out "$TEMP_CERT" \
+    -days 3650 -nodes -config "$CERT_CONFIG" -extensions v3_code_signing 2>/dev/null
+
+# Create PKCS12 bundle
+openssl pkcs12 -export -out "$TEMP_P12" -inkey "$TEMP_KEY" -in "$TEMP_CERT" \
+    -passout pass: 2>/dev/null
+
+# Import into keychain
+security import "$TEMP_P12" -k ~/Library/Keychains/login.keychain-db \
+    -T /usr/bin/codesign -P "" 2>/dev/null || \
+security import "$TEMP_P12" -k ~/Library/Keychains/login.keychain \
+    -T /usr/bin/codesign -P "" 2>/dev/null
+
+# Clean up
+rm -f "$CERT_CONFIG" "$TEMP_KEY" "$TEMP_CERT" "$TEMP_P12"
+
+# Verify
+if security find-identity -v -p codesigning 2>&1 | grep -q "$CERT_NAME"; then
+    info "Certificate created successfully"
     echo ""
-    echo "The build script will use the first available identity."
+    warn "You need to trust the certificate:"
+    echo "    1. Open Keychain Access"
+    echo "    2. Find '$CERT_NAME' in login keychain"
+    echo "    3. Double-click it > Trust > Code Signing: Always Trust"
+    echo ""
+    echo "  After trusting, rebuild with: make install"
+    echo "  Accessibility permissions will persist across rebuilds."
 else
-    echo "No code signing certificates found."
+    echo -e "${RED}[✗]${NC} Failed to create certificate"
     echo ""
-    echo "To create one, follow the instructions at the top of this script:"
-    echo "  cat scripts/setup-signing.sh"
-    echo ""
-    echo "Or simply grant accessibility permissions after each rebuild."
+    echo "  Manual alternative:"
+    echo "    1. Open Keychain Access"
+    echo "    2. Menu: Keychain Access > Certificate Assistant > Create a Certificate"
+    echo "    3. Name: '$CERT_NAME'"
+    echo "    4. Type: Self-Signed Root, Certificate Type: Code Signing"
+    echo "    5. Trust it for Code Signing"
+    exit 1
 fi
