@@ -5,7 +5,14 @@ import Foundation
 class AudioRecorder {
     private var audioEngine: AVAudioEngine?
     private var audioConverter: AVAudioConverter?
+
+    // The audio tap callback writes to recordedSamples on a private CoreAudio
+    // thread, while getCurrentSamples()/stopRecording() read it from other
+    // queues. Swift Array is not thread-safe, so all access goes through this
+    // lock. os_unfair_lock is the lowest-overhead primitive available; the
+    // critical sections are tiny (one Array op each).
     private var recordedSamples: [Float] = []
+    private var samplesLock = os_unfair_lock_s()
 
     var currentLevel: Float = 0.0
     var onLevelUpdate: ((Float) -> Void)?
@@ -26,8 +33,10 @@ class AudioRecorder {
     }
 
     func startRecording() {
+        os_unfair_lock_lock(&samplesLock)
         recordedSamples.removeAll()
         recordedSamples.reserveCapacity(16000 * 30) // Pre-allocate for ~30 seconds
+        os_unfair_lock_unlock(&samplesLock)
         currentLevel = 0.0
 
         guard let audioEngine = audioEngine else { return }
@@ -125,12 +134,24 @@ class AudioRecorder {
               let channelData = convertedBuffer.floatChannelData?[0] else { return }
 
         let frameCount = Int(convertedBuffer.frameLength)
+        os_unfair_lock_lock(&samplesLock)
         recordedSamples.append(contentsOf: UnsafeBufferPointer(start: channelData, count: frameCount))
+        os_unfair_lock_unlock(&samplesLock)
     }
 
-    /// Get current samples without stopping (for live transcription)
-    func getCurrentSamples() -> [Float]? {
+    /// Snapshot of current samples for live transcription. Returns the tail
+    /// only when `tailSeconds` is provided so we don't re-transcribe the
+    /// entire buffer every tick (was O(N) per tick → quadratic CPU).
+    func getCurrentSamples(tailSeconds: Double? = nil) -> [Float]? {
+        os_unfair_lock_lock(&samplesLock)
+        defer { os_unfair_lock_unlock(&samplesLock) }
         guard !recordedSamples.isEmpty else { return nil }
+        if let tail = tailSeconds {
+            let tailFrames = Int(tail * sampleRate)
+            if recordedSamples.count > tailFrames {
+                return Array(recordedSamples.suffix(tailFrames))
+            }
+        }
         return recordedSamples
     }
 
@@ -140,10 +161,9 @@ class AudioRecorder {
         audioConverter = nil
         currentLevel = 0.0
 
-        guard !recordedSamples.isEmpty else {
-            return nil
-        }
-
+        os_unfair_lock_lock(&samplesLock)
+        defer { os_unfair_lock_unlock(&samplesLock) }
+        guard !recordedSamples.isEmpty else { return nil }
         let samples = recordedSamples
         recordedSamples.removeAll(keepingCapacity: false) // Release memory
         return samples

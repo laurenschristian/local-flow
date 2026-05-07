@@ -434,12 +434,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func startLiveTranscription() {
         liveTranscriptionTask?.cancel()
         liveTranscriptionTask = Task {
-            // Wait a bit before first transcription to accumulate audio
             try? await Task.sleep(for: .seconds(1.5))
 
+            // Live preview transcribes a rolling tail (not the full buffer) so
+            // CPU stays bounded regardless of recording length. The final
+            // transcription on stop still uses the complete audio.
+            let livePreviewWindowSeconds = 8.0
+
             while !Task.isCancelled && AppState.shared.status == .recording {
-                if let samples = audioRecorder.getCurrentSamples(), samples.count > 16000 { // At least 1 second
-                    // Run transcription in background
+                if let samples = audioRecorder.getCurrentSamples(tailSeconds: livePreviewWindowSeconds),
+                   samples.count > 16000 {
                     let result = await whisperService.transcribe(audioData: samples, onSegment: nil)
                     if case .success(let text) = result, !text.isEmpty {
                         await MainActor.run {

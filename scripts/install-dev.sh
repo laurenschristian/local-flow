@@ -22,5 +22,12 @@ else
     cp -R "$BUILD_DIR/$APP_NAME.app" "$INSTALL_DIR/"
 fi
 
+# Re-sign with a stable identifier so TCC keeps prior Accessibility/Microphone
+# grants across rebuilds. Without this, the binary's CDHash changes every
+# build and macOS silently revokes permissions, forcing a manual re-grant.
+echo "Re-signing with stable identifier (preserves TCC grants)..."
+codesign --force --deep --sign - --identifier "com.localflow.app" "$INSTALL_DIR/$APP_NAME.app" 2>/dev/null || \
+    echo "Warning: codesign failed. You may need to re-grant Accessibility in System Settings."
+
 echo "Done. Starting $APP_NAME..."
 open "$INSTALL_DIR/$APP_NAME.app"
