@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 
 class AudioRecorder {
@@ -32,6 +33,26 @@ class AudioRecorder {
         guard let audioEngine = audioEngine else { return }
 
         let inputNode = audioEngine.inputNode
+
+        // Apply user-chosen input device to the AUHAL before reading the format,
+        // since outputFormat(forBus:) reflects whichever device the unit is bound to.
+        if let uid = Settings.shared.selectedInputDeviceUID,
+           let deviceID = AudioDeviceManager.deviceID(forUID: uid),
+           let audioUnit = inputNode.audioUnit {
+            var id = deviceID
+            let status = AudioUnitSetProperty(
+                audioUnit,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                0,
+                &id,
+                UInt32(MemoryLayout<AudioDeviceID>.size)
+            )
+            if status != noErr {
+                print("Failed to set input device (\(status)), falling back to system default")
+            }
+        }
+
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
         guard let whisperFormat = AVAudioFormat(
