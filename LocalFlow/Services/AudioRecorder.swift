@@ -47,6 +47,11 @@ class AudioRecorder {
         // Create converter once, reuse for all buffers
         audioConverter = AVAudioConverter(from: inputFormat, to: whisperFormat)
 
+        // Defensive: AVAudioEngine raises an NSException (→ SIGABRT, uncatchable in Swift)
+        // if a tap is already installed on this bus. Can happen after a stop that didn't
+        // fully tear down, or if the input device changed mid-session.
+        inputNode.removeTap(onBus: 0)
+
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer)
         }
