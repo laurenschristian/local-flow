@@ -453,6 +453,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 switch result {
                 case .success(var text):
                     print("[LocalFlow] Transcription: \(text)")
+                    if self.isLikelyHallucination(text: text, audio: audioData) {
+                        print("[LocalFlow] Dropped likely silence-hallucination: \(text)")
+                        text = ""
+                    }
                     if !text.isEmpty {
                         let effective = self.effectiveSettings()
 
@@ -530,5 +534,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 accessibilityDescription: "LocalFlow"
             )
         }
+    }
+
+    // Whisper memorized end-of-video phrases from YouTube subtitles in its
+    // training data and emits them as confident transcripts when the audio is
+    // silent. We drop these when the audio energy is below a speech threshold.
+    private static let hallucinationPhrases: Set<String> = [
+        "thank you", "thank you.", "thanks for watching", "thanks for watching.",
+        "thanks for watching!", "thank you for watching", "thank you for watching.",
+        "thank you for watching!", "thanks", "thanks.", "thank you!",
+        "you", "you.", ".", "...", "bye", "bye.", "goodbye", "goodbye.",
+        "subtitles by the amara.org community",
+        "please subscribe", "like and subscribe",
+    ]
+
+    private func isLikelyHallucination(text: String, audio: [Float]) -> Bool {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        guard Self.hallucinationPhrases.contains(normalized) else { return false }
+
+        // Match a known hallucination phrase. Confirm by checking audio energy:
+        // if the recording was effectively silent, this is definitely a hallucination.
+        guard !audio.isEmpty else { return true }
+        var sumSquares: Float = 0
+        for sample in audio { sumSquares += sample * sample }
+        let rms = sqrt(sumSquares / Float(audio.count))
+        // Empirical: real speech RMS is typically > 0.01; ambient noise sits well below.
+        return rms < 0.005
     }
 }
