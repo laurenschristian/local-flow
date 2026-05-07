@@ -6,26 +6,15 @@
         <description>Updates for LocalFlow</description>
         <language>en</language>
         <item>
-            <title>Version 0.6.0</title>
-            <pubDate>Mon, 16 Feb 2026 14:29:20 -0600</pubDate>
-            <sparkle:version>13</sparkle:version>
-            <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
+            <title>Version 0.6.1</title>
+            <pubDate>Thu, 07 May 2026 14:28:47 -0500</pubDate>
+            <sparkle:version>14</sparkle:version>
+            <sparkle:shortVersionString>0.6.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/laurenschristian/local-flow/releases/download/v0.6.0/LocalFlow-v0.6.0-mac-arm64.dmg"
+            <enclosure url="https://github.com/laurenschristian/local-flow/releases/download/v0.6.1/LocalFlow-v0.6.1-mac-arm64.dmg"
                        type="application/octet-stream"
-                       sparkle:edSignature="jqGrtZG7JxrkBQHYGHB21Lw2JyExq4/0jOQegKGX6fIB5lC0dEPeMmqTyCvfRip61gebiAaAH5evDCkQ+UDJAQ=="
-                       length="2437678"/>
-        </item>
-        <item>
-            <title>Version 0.5.3</title>
-            <pubDate>Sun, 28 Dec 2025 21:51:33 -0600</pubDate>
-            <sparkle:version>12</sparkle:version>
-            <sparkle:shortVersionString>0.5.3</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/laurenschristian/local-flow/releases/download/v0.5.3/LocalFlow-v0.5.3-mac-arm64.dmg"
-                       type="application/octet-stream"
-                       sparkle:edSignature="mIxwkuMz+WxT0IwUT4BcUk2ZIMTIgIGkyOognLm3NAe/3FpRQhzFtBDvz2byJOta2bUz1LQpfauSOAgvC5sZCQ=="
-                       length="2015129"/>
+                       sparkle:edSignature="ni2s8z9kTzWYUoLZWGFN6gaBAKnLJe+jsR90eNg5lhYOfKhvUHLTduNABYLqnKVAQAEjZJ8omAFvEE1tZD+YCQ=="
+                       length="2029588"/>
         </item>
     </channel>
 </rss>
