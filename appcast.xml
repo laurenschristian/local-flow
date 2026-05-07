@@ -6,15 +6,15 @@
         <description>Updates for LocalFlow</description>
         <language>en</language>
         <item>
-            <title>Version 0.6.1</title>
-            <pubDate>Thu, 07 May 2026 14:28:47 -0500</pubDate>
-            <sparkle:version>14</sparkle:version>
-            <sparkle:shortVersionString>0.6.1</sparkle:shortVersionString>
+            <title>Version 0.6.2</title>
+            <pubDate>Thu, 07 May 2026 14:35:50 -0500</pubDate>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>0.6.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/laurenschristian/local-flow/releases/download/v0.6.1/LocalFlow-v0.6.1-mac-arm64.dmg"
+            <enclosure url="https://github.com/laurenschristian/local-flow/releases/download/v0.6.2/LocalFlow-v0.6.2-mac-arm64.dmg"
                        type="application/octet-stream"
-                       sparkle:edSignature="ni2s8z9kTzWYUoLZWGFN6gaBAKnLJe+jsR90eNg5lhYOfKhvUHLTduNABYLqnKVAQAEjZJ8omAFvEE1tZD+YCQ=="
-                       length="2029588"/>
+                       sparkle:edSignature="Y/8veNu9ammfOnsBnTCLXqCzp2lxZNfXBTPLEVjSbZxXJ9UOXsBr6KVmWv9XsiciJZPau1MMc2hiFSFKmQ5EAg=="
+                       length="2031208"/>
         </item>
     </channel>
 </rss>
