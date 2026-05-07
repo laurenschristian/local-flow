@@ -248,6 +248,13 @@ class Settings: ObservableObject {
         }
     }
 
+    // nil = follow system default input device
+    @Published var selectedInputDeviceUID: String? {
+        didSet {
+            defaults.set(selectedInputDeviceUID, forKey: "selectedInputDeviceUID")
+        }
+    }
+
     var modelPath: String {
         let modelsDir = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -302,6 +309,9 @@ class Settings: ObservableObject {
         // Language
         let savedLanguage = defaults.string(forKey: "language") ?? TranscriptionLanguage.auto.rawValue
         self.language = TranscriptionLanguage(rawValue: savedLanguage) ?? .auto
+
+        // Input device (nil = system default)
+        self.selectedInputDeviceUID = defaults.string(forKey: "selectedInputDeviceUID")
 
         // Migrate from English-only model selection
         migrateFromEnglishModels()

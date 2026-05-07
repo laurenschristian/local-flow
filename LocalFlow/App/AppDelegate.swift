@@ -3,7 +3,7 @@ import SwiftUI
 import AVFoundation
 import Combine
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var hotkeyManager: HotkeyManager!
     private var audioRecorder: AudioRecorder!
@@ -217,6 +217,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Microphone picker (populated lazily on open)
+        let micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+        micItem.tag = 4
+        micItem.submenu = buildMicrophoneSubmenu()
+        menu.addItem(micItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         // Instructions
         let instructionItem = NSMenuItem(title: "Double-tap \(settings.triggerKey.displayName) to record", action: nil, keyEquivalent: "")
         instructionItem.isEnabled = false
@@ -240,11 +248,59 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let quitItem = NSMenuItem(title: "Quit LocalFlow", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
+        menu.delegate = self
         self.statusItem.menu = menu
 
         // Update status periodically
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.updateMenuStatus()
+        }
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        // Refresh the mic submenu so newly-connected devices (e.g. AirPods) appear.
+        guard let micItem = menu.item(withTag: 4) else { return }
+        micItem.submenu = buildMicrophoneSubmenu()
+    }
+
+    private func buildMicrophoneSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+        let currentUID = settings.selectedInputDeviceUID
+
+        let systemItem = NSMenuItem(
+            title: "System Default",
+            action: #selector(selectMicrophone(_:)),
+            keyEquivalent: ""
+        )
+        systemItem.target = self
+        systemItem.representedObject = NSNull()
+        systemItem.state = (currentUID == nil) ? NSControl.StateValue.on : .off
+        submenu.addItem(systemItem)
+
+        let devices = AudioDeviceManager.inputDevices()
+        if !devices.isEmpty {
+            submenu.addItem(NSMenuItem.separator())
+            for device in devices {
+                let item = NSMenuItem(
+                    title: device.name,
+                    action: #selector(selectMicrophone(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = device.uid
+                item.state = (currentUID == device.uid) ? NSControl.StateValue.on : .off
+                submenu.addItem(item)
+            }
+        }
+
+        return submenu
+    }
+
+    @objc private func selectMicrophone(_ sender: NSMenuItem) {
+        if sender.representedObject is NSNull {
+            settings.selectedInputDeviceUID = nil
+        } else if let uid = sender.representedObject as? String {
+            settings.selectedInputDeviceUID = uid
         }
     }
 
