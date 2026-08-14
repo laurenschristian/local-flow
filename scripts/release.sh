@@ -1,26 +1,184 @@
-#!/bin/zsh
-# Usage: scripts/release.sh 0.9.0
-# Builds, signs, zips, creates the GitHub release, and updates the brew cask.
-set -euo pipefail
-V="${1:?version required, e.g. 0.9.0}"
-cd "$(dirname "$0")/.."
+#!/bin/bash
+set -e
 
-B=$(( $(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" LocalFlow/Info.plist) + 1 ))
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" -c "Set :CFBundleVersion $B" LocalFlow/Info.plist
-sed -i '' -e "s/MARKETING_VERSION = .*/MARKETING_VERSION = $V;/" -e "s/CURRENT_PROJECT_VERSION = .*/CURRENT_PROJECT_VERSION = $B;/" LocalFlow.xcodeproj/project.pbxproj
+# LocalFlow Release Script
+# Creates a signed DMG and updates appcast.xml for Sparkle
 
-xcodebuild -project LocalFlow.xcodeproj -scheme LocalFlow -configuration Release -derivedDataPath build build | grep -E "error|BUILD"
-APP=build/Build/Products/Release/LocalFlow.app
-codesign --force --deep --preserve-metadata=entitlements --sign "Apple Development: lg@mail12.me (ZRP7TYYLP8)" "$APP"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+BUILD_DIR="$PROJECT_DIR/build"
+APP_NAME="LocalFlow"
+DERIVED_DATA="$HOME/Library/Developer/Xcode/DerivedData"
 
-ZIP="/tmp/LocalFlow-$V.zip"
-ditto -c -k --keepParent "$APP" "$ZIP"
-SHA=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-gh release create "v$V" "$ZIP" -R laurenschristian/local-flow -t "LocalFlow $V" --generate-notes
+info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
+# Get version from Info.plist
+VERSION=$(defaults read "$PROJECT_DIR/LocalFlow/Info.plist" CFBundleShortVersionString)
+BUILD_NUMBER=$(defaults read "$PROJECT_DIR/LocalFlow/Info.plist" CFBundleVersion)
+
+info "Building LocalFlow v$VERSION ($BUILD_NUMBER)"
+
+# Clean and create build directory
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+
+# Build release
+info "Building release..."
+cd "$PROJECT_DIR"
+xcodegen generate
+xcodebuild -project LocalFlow.xcodeproj \
+    -scheme LocalFlow \
+    -configuration Release \
+    -arch arm64 \
+    build \
+    CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
+    CODE_SIGN_IDENTITY="-" \
+    CODE_SIGNING_REQUIRED=NO \
+    2>&1 | grep -E "(error:|warning:|BUILD SUCCEEDED)" || true
+
+if [ ! -d "$BUILD_DIR/$APP_NAME.app" ]; then
+    error "Build failed - app not found"
+fi
+
+# Sign with Apple Development certificate
+info "Signing app..."
+codesign --force --deep --sign "Apple Development" "$BUILD_DIR/$APP_NAME.app"
+
+info "Build complete"
+
+# Create DMG
+DMG_NAME="$APP_NAME-v$VERSION-mac-arm64.dmg"
+DMG_PATH="$BUILD_DIR/$DMG_NAME"
+
+info "Creating DMG..."
+
+# Use create-dmg for a professional DMG with icon
+if command -v create-dmg &> /dev/null; then
+    rm -f "$DMG_PATH"
+
+    # Use custom background if available
+    BACKGROUND_ARGS=""
+    if [ -f "$PROJECT_DIR/resources/dmg-background.png" ]; then
+        BACKGROUND_ARGS="--background $PROJECT_DIR/resources/dmg-background.png"
+    fi
+
+    create-dmg \
+        --volname "$APP_NAME" \
+        --volicon "$PROJECT_DIR/LocalFlow/Assets.xcassets/AppIcon.appiconset/icon_512.png" \
+        $BACKGROUND_ARGS \
+        --window-pos 200 120 \
+        --window-size 600 400 \
+        --icon-size 100 \
+        --icon "$APP_NAME.app" 150 190 \
+        --hide-extension "$APP_NAME.app" \
+        --app-drop-link 450 190 \
+        --text-size 14 \
+        "$DMG_PATH" \
+        "$BUILD_DIR/$APP_NAME.app" \
+        2>/dev/null || true
+else
+    # Fallback to basic hdiutil
+    DMG_TEMP="$BUILD_DIR/dmg_temp"
+    mkdir -p "$DMG_TEMP"
+    cp -R "$BUILD_DIR/$APP_NAME.app" "$DMG_TEMP/"
+    ln -s /Applications "$DMG_TEMP/Applications"
+    hdiutil create -volname "$APP_NAME" \
+        -srcfolder "$DMG_TEMP" \
+        -ov -format UDZO \
+        "$DMG_PATH"
+    rm -rf "$DMG_TEMP"
+fi
+
+# Set custom icon on DMG file
+info "Setting DMG icon..."
+ICON_PNG="$PROJECT_DIR/LocalFlow/Assets.xcassets/AppIcon.appiconset/icon_512.png"
+if [ -f "$ICON_PNG" ] && command -v fileicon &> /dev/null; then
+    mkdir -p /tmp/icon.iconset
+    sips -z 512 512 "$ICON_PNG" --out /tmp/icon.iconset/icon_512x512.png 2>/dev/null
+    iconutil -c icns /tmp/icon.iconset -o /tmp/LocalFlow.icns 2>/dev/null
+    fileicon set "$DMG_PATH" /tmp/LocalFlow.icns 2>/dev/null
+    rm -rf /tmp/icon.iconset /tmp/LocalFlow.icns
+fi
+
+# Get file size
+DMG_SIZE=$(stat -f%z "$DMG_PATH")
+info "DMG created: $DMG_NAME ($DMG_SIZE bytes)"
+
+# Find Sparkle tools
+SPARKLE_DIR=$(find "$DERIVED_DATA" -path "*/SourcePackages/artifacts/sparkle/Sparkle" -type d 2>/dev/null | head -1)
+if [ -z "$SPARKLE_DIR" ]; then
+    error "Sparkle not found. Run 'xcodebuild -resolvePackageDependencies' first."
+fi
+
+SIGN_UPDATE="$SPARKLE_DIR/bin/sign_update"
+GENERATE_APPCAST="$SPARKLE_DIR/bin/generate_appcast"
+
+# Sign the DMG
+info "Signing DMG with Sparkle EdDSA key..."
+SIGNATURE=$("$SIGN_UPDATE" "$DMG_PATH" 2>&1)
+ED_SIGNATURE=$(echo "$SIGNATURE" | grep "sparkle:edSignature" | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
+
+if [ -z "$ED_SIGNATURE" ]; then
+    error "Failed to sign DMG"
+fi
+
+info "Signature: $ED_SIGNATURE"
+
+# Generate appcast entry
+DOWNLOAD_URL="https://github.com/laurenschristian/local-flow/releases/download/v$VERSION/$DMG_NAME"
+PUB_DATE=$(date -R)
+
+info "Updating appcast.xml..."
+cat > "$PROJECT_DIR/appcast.xml" << EOF
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>LocalFlow Updates</title>
+        <link>https://raw.githubusercontent.com/laurenschristian/local-flow/main/appcast.xml</link>
+        <description>Updates for LocalFlow</description>
+        <language>en</language>
+        <item>
+            <title>Version $VERSION</title>
+            <pubDate>$PUB_DATE</pubDate>
+            <sparkle:version>$BUILD_NUMBER</sparkle:version>
+            <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="$DOWNLOAD_URL"
+                       type="application/octet-stream"
+                       sparkle:edSignature="$ED_SIGNATURE"
+                       length="$DMG_SIZE"/>
+        </item>
+    </channel>
+</rss>
+EOF
+
+info "appcast.xml updated"
+
+# Update Homebrew cask in the local tap clone
 TAP="$HOME/Documents/GitHub/personal/homebrew-tap"
-sed -i '' -e "s/version \".*\"/version \"$V\"/" -e "s/sha256 \".*\"/sha256 \"$SHA\"/" "$TAP/Casks/localflow.rb"
-git -C "$TAP" commit -am "chore: localflow $V" && git -C "$TAP" push
+if [ -f "$TAP/Casks/localflow.rb" ]; then
+    DMG_SHA=$(shasum -a 256 "$DMG_PATH" | cut -d' ' -f1)
+    sed -i '' -e "s/version \".*\"/version \"$VERSION\"/" -e "s/sha256 \".*\"/sha256 \"$DMG_SHA\"/" "$TAP/Casks/localflow.rb"
+    info "Cask updated (commit and push homebrew-tap after uploading the release)"
+fi
 
-echo "Released $V (build $B). Upgrade with: brew upgrade --cask --no-quarantine localflow"
+echo ""
+info "Release artifacts ready:"
+echo "  DMG: $DMG_PATH"
+echo "  Appcast: $PROJECT_DIR/appcast.xml"
+echo ""
+info "Next steps:"
+echo "  1. git add appcast.xml && git commit -m 'release v$VERSION'"
+echo "  2. git push"
+echo "  3. gh release create v$VERSION '$DMG_PATH' --title 'LocalFlow v$VERSION'"
+echo "  4. git -C \"$TAP\" commit -am 'chore: localflow $VERSION' && git -C \"$TAP\" push"
+echo ""
+info "Done!"
