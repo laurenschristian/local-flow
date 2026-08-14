@@ -106,6 +106,12 @@ class RecordingOverlayController {
         let initialWidth: CGFloat = 360
         let initialHeight: CGFloat = 100
         hostingView.frame = NSRect(x: 0, y: 0, width: initialWidth, height: initialHeight)
+        // Clip the backing layer: the material backdrop ignores the SwiftUI
+        // shape clip in a transparent window and shows square black corners.
+        hostingView.wantsLayer = true
+        hostingView.layer?.cornerRadius = AppStyle.Layout.cornerRadius
+        hostingView.layer?.cornerCurve = .continuous
+        hostingView.layer?.masksToBounds = true
         self.hostingView = hostingView
 
         let window = NSWindow(
@@ -305,8 +311,6 @@ struct GlassBackground: View {
                     lineWidth: 1
                 )
         }
-        .shadow(color: AppStyle.Colors.brand.opacity(0.3), radius: 30, x: 0, y: 15)
-        .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
     }
 }
 
