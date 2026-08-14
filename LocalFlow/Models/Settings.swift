@@ -307,6 +307,12 @@ class Settings: ObservableObject {
         }
     }
 
+    @Published var trimSilenceEnabled: Bool {
+        didSet {
+            defaults.set(trimSilenceEnabled, forKey: "trimSilenceEnabled")
+        }
+    }
+
     var modelPath: String {
         let modelsDir = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -371,6 +377,7 @@ class Settings: ObservableObject {
         self.customVocabulary = defaults.string(forKey: "customVocabulary") ?? ""
         self.spokenCommandsEnabled = defaults.object(forKey: "spokenCommandsEnabled") as? Bool ?? true
         self.cleanupModeEnabled = defaults.bool(forKey: "cleanupModeEnabled")
+        self.trimSilenceEnabled = defaults.object(forKey: "trimSilenceEnabled") as? Bool ?? true
 
         // Migrate from English-only model selection
         migrateFromEnglishModels()
@@ -443,9 +450,6 @@ class Settings: ObservableObject {
     func addToHistory(_ text: String) {
         let entry = TranscriptionEntry(text: text, timestamp: Date())
         transcriptionHistory.insert(entry, at: 0)
-        if transcriptionHistory.count > 200 {
-            transcriptionHistory = Array(transcriptionHistory.prefix(200))
-        }
     }
 
     func removeFromHistory(_ id: UUID) {
@@ -468,18 +472,48 @@ class Settings: ObservableObject {
         }
     }
 
+    // History lives in a file so it can grow without bound; UserDefaults
+    // (the pre-0.10 store) chokes on large blobs.
+    private static let historySaveQueue = DispatchQueue(label: "com.localflow.history-save", qos: .utility)
+
+    private static var historyFileURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("LocalFlow/history.json")
+    }
+
     private func saveHistory() {
-        if let data = try? JSONEncoder().encode(transcriptionHistory) {
-            defaults.set(data, forKey: "transcriptionHistory")
+        let entries = transcriptionHistory
+        Self.historySaveQueue.async {
+            Self.writeHistoryFile(entries)
         }
     }
 
+    private static func writeHistoryFile(_ entries: [TranscriptionEntry]) {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(entries) else { return }
+        let url = historyFileURL
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
+    }
+
     private static func loadHistory() -> [TranscriptionEntry] {
-        guard let data = UserDefaults.standard.data(forKey: "transcriptionHistory"),
-              let history = try? JSONDecoder().decode([TranscriptionEntry].self, from: data) else {
-            return []
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let data = try? Data(contentsOf: historyFileURL),
+           let history = try? decoder.decode([TranscriptionEntry].self, from: data) {
+            return history
         }
-        return history
+
+        // Migrate the old UserDefaults store; write the file before removing
+        // the key so a crash in between cannot lose the history.
+        if let data = UserDefaults.standard.data(forKey: "transcriptionHistory"),
+           let history = try? JSONDecoder().decode([TranscriptionEntry].self, from: data) {
+            writeHistoryFile(history)
+            UserDefaults.standard.removeObject(forKey: "transcriptionHistory")
+            return history
+        }
+        return []
     }
 }
 

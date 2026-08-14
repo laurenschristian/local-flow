@@ -3,8 +3,11 @@ import SwiftUI
 import AVFoundation
 import Combine
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
+    private var panelPopover: NSPopover?
+    private var modelChangeCancellable: AnyCancellable?
+    private var loadedModelPath: String?
     private var hotkeyManager: HotkeyManager!
     private var audioRecorder: AudioRecorder!
     private var whisperService: WhisperService!
@@ -159,6 +162,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         audioRecorder.onLevelUpdate = { level in
             RecordingOverlayController.shared.updateAudioLevel(level)
         }
+
+        // Reload when the model changes from any UI, so the switch takes
+        // effect immediately instead of after the next idle unload.
+        modelChangeCancellable = settings.$selectedModel
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self, self.settings.modelPath != self.loadedModelPath else { return }
+                    guard self.settings.isModelDownloaded(self.settings.selectedModel) else { return }
+                    self.loadModel()
+                }
+            }
     }
 
     private func setupSounds() {
@@ -197,129 +213,41 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "LocalFlow")
+            button.action = #selector(togglePanel)
+            button.target = self
         }
 
-        let menu = NSMenu()
-
-        // Status item
-        let statusItem = NSMenuItem(title: "Ready", action: nil, keyEquivalent: "")
-        statusItem.tag = 1
-        menu.addItem(statusItem)
-
-        // Model info
-        let modelItem = NSMenuItem(title: "Model: \(settings.selectedModel.shortName)", action: nil, keyEquivalent: "")
-        modelItem.tag = 2
-        menu.addItem(modelItem)
-
-        // Stats
-        let statsItem = NSMenuItem(title: "Words today: 0", action: nil, keyEquivalent: "")
-        statsItem.tag = 3
-        menu.addItem(statsItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Microphone picker (populated lazily on open)
-        let micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
-        micItem.tag = 4
-        micItem.submenu = buildMicrophoneSubmenu()
-        menu.addItem(micItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Instructions
-        let instructionItem = NSMenuItem(title: "Double-tap \(settings.triggerKey.displayName) to record", action: nil, keyEquivalent: "")
-        instructionItem.isEnabled = false
-        instructionItem.tag = 5
-        menu.addItem(instructionItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Settings
-        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        // Check for updates
-        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
-        updateItem.target = self
-        menu.addItem(updateItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Quit
-        let quitItem = NSMenuItem(title: "Quit LocalFlow", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        menu.addItem(quitItem)
-
-        menu.delegate = self
-        self.statusItem.menu = menu
-
-        // Update status periodically
-        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.updateMenuStatus()
-        }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = false
+        popover.contentViewController = NSHostingController(rootView: MenuBarPanelView(
+            onPaste: { [weak self] text in
+                self?.panelPopover?.performClose(nil)
+                // Give focus a beat to return to the previous app before pasting.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self?.textInserter.insertText(text, clipboardOnly: Settings.shared.clipboardMode)
+                }
+            },
+            onOpenSettings: { [weak self] in
+                self?.panelPopover?.performClose(nil)
+                self?.openSettings()
+            },
+            onCheckUpdates: { [weak self] in
+                self?.panelPopover?.performClose(nil)
+                UpdateController.shared.checkForUpdates()
+            },
+            onQuit: { NSApp.terminate(nil) }
+        ))
+        panelPopover = popover
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
-        // Refresh the mic submenu so newly-connected devices (e.g. AirPods) appear.
-        if let micItem = menu.item(withTag: 4) {
-            micItem.submenu = buildMicrophoneSubmenu()
-        }
-        if let modelItem = menu.item(withTag: 2) {
-            modelItem.title = "Model: \(settings.selectedModel.shortName)"
-        }
-        if let instructionItem = menu.item(withTag: 5) {
-            instructionItem.title = "Double-tap \(settings.triggerKey.displayName) to record"
-        }
-    }
-
-    private func buildMicrophoneSubmenu() -> NSMenu {
-        let submenu = NSMenu()
-        let currentUID = settings.selectedInputDeviceUID
-
-        let systemItem = NSMenuItem(
-            title: "System Default",
-            action: #selector(selectMicrophone(_:)),
-            keyEquivalent: ""
-        )
-        systemItem.target = self
-        systemItem.representedObject = NSNull()
-        systemItem.state = (currentUID == nil) ? NSControl.StateValue.on : .off
-        submenu.addItem(systemItem)
-
-        let devices = AudioDeviceManager.inputDevices()
-        if !devices.isEmpty {
-            submenu.addItem(NSMenuItem.separator())
-            for device in devices {
-                let item = NSMenuItem(
-                    title: device.name,
-                    action: #selector(selectMicrophone(_:)),
-                    keyEquivalent: ""
-                )
-                item.target = self
-                item.representedObject = device.uid
-                item.state = (currentUID == device.uid) ? NSControl.StateValue.on : .off
-                submenu.addItem(item)
-            }
-        }
-
-        return submenu
-    }
-
-    @objc private func selectMicrophone(_ sender: NSMenuItem) {
-        if sender.representedObject is NSNull {
-            settings.selectedInputDeviceUID = nil
-        } else if let uid = sender.representedObject as? String {
-            settings.selectedInputDeviceUID = uid
-        }
-    }
-
-    private func updateMenuStatus() {
-        guard let menu = statusItem.menu else { return }
-        if let statusItem = menu.item(withTag: 1) {
-            statusItem.title = appState.status.displayText
-        }
-        if let statsItem = menu.item(withTag: 3) {
-            statsItem.title = "Words today: \(settings.wordsTranscribedToday)"
+    @objc private func togglePanel() {
+        guard let button = statusItem.button, let popover = panelPopover else { return }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
         }
     }
 
@@ -343,10 +271,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         settingsWindow = window
-    }
-
-    @objc private func checkForUpdates() {
-        UpdateController.shared.checkForUpdates()
     }
 
     private func setupHotkey() {
@@ -393,6 +317,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func loadModel() {
+        loadedModelPath = settings.modelPath
         Task {
             await MainActor.run {
                 AppState.shared.status = .loading
@@ -504,13 +429,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateMenuBarIcon(recording: false)
         RecordingOverlayController.shared.updateStatus(.transcribing)
 
-        guard let audioData = audioRecorder.stopRecording() else {
+        guard let rawAudio = audioRecorder.stopRecording() else {
             print("[LocalFlow] No audio data recorded")
             failWithError(.noAudioRecorded)
             RecordingOverlayController.shared.hide()
             return
         }
 
+        let audioData = settings.trimSilenceEnabled ? SilenceTrimmer.trim(rawAudio) : rawAudio
+        if audioData.count < rawAudio.count {
+            let saved = Double(rawAudio.count - audioData.count) / 16000.0
+            print("[LocalFlow] Silence trim removed \(String(format: "%.1f", saved))s of audio")
+        }
         print("[LocalFlow] Got \(audioData.count) audio samples, transcribing...")
 
         Task {
