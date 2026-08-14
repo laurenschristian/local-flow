@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var microphoneGranted = false
     @State private var permissionTimer: Timer?
     @State private var inputDevices: [AudioInputDevice] = []
+    @State private var historySearch = ""
     @StateObject private var micMonitor = MicLevelMonitor()
     @Environment(\.colorScheme) private var colorScheme
 
@@ -302,9 +303,41 @@ struct SettingsView: View {
                 }
             }
 
+            SectionHeader(title: "Vocabulary", icon: "character.book.closed.fill")
+
+            GlassCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Custom words")
+                        .font(.system(size: 13, weight: .medium))
+                    Text("Names, brands, and jargon Whisper should recognize. Comma separated.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    TextField("Bonjoy, PetroBench, Wrangler, Kubernetes", text: $settings.customVocabulary, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(2...4)
+                        .font(.system(size: 12))
+                }
+            }
+
             SectionHeader(title: "Transcription", icon: "text.bubble.fill")
 
             GlassCard {
+                SettingsToggle(
+                    title: "Spoken commands",
+                    description: "Say \"comma\", \"period\", \"new line\", \"new paragraph\", \"scratch that\"",
+                    isOn: $settings.spokenCommandsEnabled
+                )
+
+                CardDivider()
+
+                SettingsToggle(
+                    title: "Cleanup mode",
+                    description: "Fix punctuation and strip filler words with the on-device Apple model",
+                    isOn: $settings.cleanupModeEnabled
+                )
+
+                CardDivider()
+
                 SettingsToggle(
                     title: "Auto-punctuation",
                     description: "Add periods and capitalize sentences",
@@ -472,7 +505,7 @@ struct SettingsView: View {
 
             HintCard(
                 icon: "info.circle.fill",
-                text: "Larger models are more accurate but slower. Small is recommended for most users. All models support 99+ languages."
+                text: "Turbo gives the best accuracy at near-Small speed. Small is the safe default. All models support 99+ languages."
             )
         }
     }
@@ -545,12 +578,21 @@ struct SettingsView: View {
 
     // MARK: - History
 
+    private var filteredHistory: [TranscriptionEntry] {
+        let query = historySearch.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return settings.transcriptionHistory }
+        return settings.transcriptionHistory.filter { $0.text.localizedCaseInsensitiveContains(query) }
+    }
+
     private var historyContent: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack {
-                SectionHeader(title: "Recent Transcriptions", icon: "clock.fill")
+                SectionHeader(title: "History", icon: "clock.fill")
                 Spacer()
                 if !settings.transcriptionHistory.isEmpty {
+                    Text("\(settings.transcriptionHistory.count) entries")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                     Button("Clear All") {
                         settings.clearHistory()
                     }
@@ -584,13 +626,45 @@ struct SettingsView: View {
                     .padding(.vertical, 24)
                 }
             } else {
-                GlassCard {
-                    VStack(spacing: 0) {
-                        ForEach(settings.transcriptionHistory.prefix(10)) { entry in
-                            HistoryRow(entry: entry)
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    TextField("Search transcriptions", text: $historySearch)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                    if !historySearch.isEmpty {
+                        Button {
+                            historySearch = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
+                )
 
-                            if entry.id != settings.transcriptionHistory.prefix(10).last?.id {
-                                CardDivider()
+                if filteredHistory.isEmpty {
+                    HintCard(icon: "magnifyingglass", text: "No transcriptions match \"\(historySearch)\".")
+                } else {
+                    GlassCard {
+                        LazyVStack(spacing: 0) {
+                            ForEach(filteredHistory) { entry in
+                                HistoryRow(
+                                    entry: entry,
+                                    onDelete: { settings.removeFromHistory(entry.id) }
+                                )
+
+                                if entry.id != filteredHistory.last?.id {
+                                    CardDivider()
+                                }
                             }
                         }
                     }
@@ -1201,25 +1275,79 @@ struct AppProfileRow: View {
 
 struct HistoryRow: View {
     let entry: TranscriptionEntry
+    var onDelete: (() -> Void)? = nil
+
+    @State private var isHovering = false
+    @State private var isExpanded = false
+    @State private var justCopied = false
+
+    private var wordCount: Int {
+        entry.text.split(separator: " ").count
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(entry.text)
-                .font(.system(size: 13))
-                .lineLimit(2)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(entry.text)
+                    .font(.system(size: 13))
+                    .lineLimit(isExpanded ? nil : 2)
+                    .textSelection(.enabled)
 
-            Text(entry.timestamp, style: .relative)
+                HStack(spacing: 6) {
+                    Text(entry.timestamp, style: .relative)
+                    Text("•")
+                    Text("\(wordCount) words")
+                }
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            }
+
+            if isHovering || justCopied {
+                HStack(spacing: 6) {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(entry.text, forType: .string)
+                        justCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { justCopied = false }
+                    } label: {
+                        Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(justCopied ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy")
+
+                    if let onDelete {
+                        Button(action: onDelete) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Delete")
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
+        .padding(.vertical, 2)
+        .onHover { isHovering = $0 }
         .contextMenu {
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(entry.text, forType: .string)
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
+            }
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
     }

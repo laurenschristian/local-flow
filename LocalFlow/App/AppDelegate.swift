@@ -536,28 +536,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             let result = await whisperService.transcribe(audioData: audioData, onSegment: nil)
 
-            await MainActor.run {
-                RecordingOverlayController.shared.hide()
+            switch result {
+            case .success(var text):
+                print("[LocalFlow] Transcription: \(text)")
+                if self.isLikelyHallucination(text: text, audio: audioData) {
+                    print("[LocalFlow] Dropped likely silence-hallucination: \(text)")
+                    text = ""
+                }
 
-                switch result {
-                case .success(var text):
-                    print("[LocalFlow] Transcription: \(text)")
-                    if self.isLikelyHallucination(text: text, audio: audioData) {
-                        print("[LocalFlow] Dropped likely silence-hallucination: \(text)")
-                        text = ""
+                let (effective, commandsOn, cleanupOn) = await MainActor.run {
+                    (self.effectiveSettings(), self.settings.spokenCommandsEnabled, self.settings.cleanupModeEnabled)
+                }
+
+                if !text.isEmpty {
+                    if commandsOn {
+                        text = SpokenCommands.apply(to: text)
                     }
+                    // Cleanup can take a moment; the overlay stays in
+                    // "Processing" until the final text is ready.
+                    if cleanupOn && !text.isEmpty {
+                        text = await CleanupService.cleanup(text)
+                    }
+                    if effective.punctuation {
+                        text = self.addPunctuation(text)
+                    }
+                    if effective.summary {
+                        text = self.formatAsSummary(text)
+                    }
+                }
+
+                await MainActor.run {
+                    RecordingOverlayController.shared.hide()
                     if !text.isEmpty {
-                        let effective = self.effectiveSettings()
-
-                        if effective.punctuation {
-                            text = self.addPunctuation(text)
-                        }
-
-                        if effective.summary {
-                            text = self.formatAsSummary(text)
-                        }
-
-                        // Track stats
                         let wordCount = text.split(separator: " ").count
                         self.settings.addWordsToStats(wordCount)
 
@@ -567,8 +577,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     }
                     AppState.shared.status = .idle
                     self.activeAppBundleId = nil
-                case .failure(let error):
-                    print("[LocalFlow] Transcription error: \(error)")
+                }
+            case .failure(let error):
+                print("[LocalFlow] Transcription error: \(error)")
+                await MainActor.run {
+                    RecordingOverlayController.shared.hide()
                     self.failWithError(.transcriptionFailed)
                 }
             }
