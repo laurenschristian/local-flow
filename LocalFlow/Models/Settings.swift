@@ -313,6 +313,12 @@ class Settings: ObservableObject {
         }
     }
 
+    @Published var pauseMediaWhileRecording: Bool {
+        didSet {
+            defaults.set(pauseMediaWhileRecording, forKey: "pauseMediaWhileRecording")
+        }
+    }
+
     var modelPath: String {
         let modelsDir = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -378,6 +384,7 @@ class Settings: ObservableObject {
         self.spokenCommandsEnabled = defaults.object(forKey: "spokenCommandsEnabled") as? Bool ?? true
         self.cleanupModeEnabled = defaults.bool(forKey: "cleanupModeEnabled")
         self.trimSilenceEnabled = defaults.object(forKey: "trimSilenceEnabled") as? Bool ?? true
+        self.pauseMediaWhileRecording = defaults.object(forKey: "pauseMediaWhileRecording") as? Bool ?? true
 
         // Migrate from English-only model selection
         migrateFromEnglishModels()

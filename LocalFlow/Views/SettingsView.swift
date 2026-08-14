@@ -345,6 +345,14 @@ struct SettingsView: View {
                 CardDivider()
 
                 SettingsToggle(
+                    title: "Pause music while recording",
+                    description: "Pause Spotify or Apple Music during dictation, resume after",
+                    isOn: $settings.pauseMediaWhileRecording
+                )
+
+                CardDivider()
+
+                SettingsToggle(
                     title: "Auto-punctuation",
                     description: "Add periods and capitalize sentences",
                     isOn: $settings.punctuationMode
