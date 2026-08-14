@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var accessibilityGranted = false
     @State private var microphoneGranted = false
     @State private var permissionTimer: Timer?
+    @State private var inputDevices: [AudioInputDevice] = []
+    @StateObject private var micMonitor = MicLevelMonitor()
     @Environment(\.colorScheme) private var colorScheme
 
     enum SettingsTab: String, CaseIterable {
@@ -214,6 +216,68 @@ struct SettingsView: View {
                 )
             }
 
+            SectionHeader(title: "Microphone", icon: "mic.fill")
+
+            GlassCard {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Input device")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("Microphone used for dictation")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Picker("", selection: Binding(
+                        get: { settings.selectedInputDeviceUID ?? "" },
+                        set: {
+                            settings.selectedInputDeviceUID = $0.isEmpty ? nil : $0
+                            micMonitor.restart()
+                        }
+                    )) {
+                        Text("System default").tag("")
+                        ForEach(inputDevices, id: \.uid) { device in
+                            Text(device.name).tag(device.uid)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
+
+                CardDivider()
+
+                HStack(spacing: 12) {
+                    Text("Input level")
+                        .font(.system(size: 13, weight: .medium))
+
+                    Spacer()
+
+                    InputLevelMeter(level: micMonitor.level)
+                        .frame(width: 180, height: 8)
+                }
+
+                if micMonitor.looksSilent {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.orange)
+                        Text("No signal from this microphone. Speak to test, or pick another device.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 8)
+                }
+            }
+            .onAppear {
+                inputDevices = AudioDeviceManager.inputDevices()
+                if microphoneGranted { micMonitor.start() }
+            }
+            .onDisappear {
+                micMonitor.stop()
+            }
+
             SectionHeader(title: "Language", icon: "globe")
 
             GlassCard {
@@ -317,9 +381,26 @@ struct SettingsView: View {
                 }
             }
 
+            SectionHeader(title: "Recording Mode", icon: "record.circle")
+
+            GlassCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(RecordingMode.allCases) { mode in
+                        RecordingModeOption(
+                            mode: mode,
+                            isSelected: settings.recordingMode == mode
+                        ) {
+                            settings.recordingMode = mode
+                        }
+                    }
+                }
+            }
+
             HintCard(
                 icon: "lightbulb.fill",
-                text: "Double-tap and hold to record. Triple-tap to re-paste last transcription."
+                text: settings.recordingMode == .toggle
+                    ? "Double-tap to start, tap once to stop. Triple-tap to re-paste last transcription."
+                    : "Double-tap and hold to record. Triple-tap to re-paste last transcription."
             )
 
             SectionHeader(title: "Timing", icon: "timer")
@@ -870,6 +951,44 @@ struct TriggerKeyOption: View {
     }
 }
 
+struct RecordingModeOption: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let mode: RecordingMode
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isSelected
+                            ? AppStyle.Colors.adaptiveAccent(for: colorScheme)
+                            : (colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)))
+                        .frame(width: 24, height: 24)
+
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(colorScheme == .dark ? .black : .white)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode.displayName)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    Text(mode.description)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct ModelOptionRow: View {
     @Environment(\.colorScheme) private var colorScheme
     let model: WhisperModel
@@ -1103,6 +1222,77 @@ struct HistoryRow: View {
                 Label("Copy", systemImage: "doc.on.doc")
             }
         }
+    }
+}
+
+/// Live input metering for the settings mic picker. Reuses AudioRecorder in
+/// level-only mode so device selection behaves exactly like a real recording.
+final class MicLevelMonitor: ObservableObject {
+    @Published var level: Float = 0
+    @Published var looksSilent = false
+
+    private let recorder = AudioRecorder()
+    private var running = false
+    private var startedAt = Date.distantPast
+    private var peak: Float = 0
+
+    func start() {
+        guard !running else { return }
+        running = true
+        startedAt = Date()
+        peak = 0
+        looksSilent = false
+        recorder.onLevelUpdate = { [weak self] level in
+            guard let self, self.running else { return }
+            self.level = level
+            self.peak = max(self.peak, level)
+            self.looksSilent = Date().timeIntervalSince(self.startedAt) > 2.5 && self.peak < 0.02
+        }
+        recorder.startRecording(collectSamples: false)
+    }
+
+    func stop() {
+        guard running else { return }
+        running = false
+        _ = recorder.stopRecording()
+        level = 0
+        looksSilent = false
+    }
+
+    func restart() {
+        stop()
+        start()
+    }
+
+    deinit {
+        if running { _ = recorder.stopRecording() }
+    }
+}
+
+struct InputLevelMeter: View {
+    let level: Float
+    private let segments = 24
+
+    var body: some View {
+        GeometryReader { geo in
+            let lit = Int(min(1, CGFloat(level) * 1.4) * CGFloat(segments))
+            HStack(spacing: 2) {
+                ForEach(0..<segments, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(color(for: i, lit: lit))
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .animation(.linear(duration: 0.08), value: lit)
+        }
+    }
+
+    private func color(for index: Int, lit: Int) -> Color {
+        guard index < lit else { return Color.primary.opacity(0.12) }
+        let fraction = Double(index) / Double(segments)
+        if fraction > 0.85 { return .red }
+        if fraction > 0.65 { return .yellow }
+        return .green
     }
 }
 

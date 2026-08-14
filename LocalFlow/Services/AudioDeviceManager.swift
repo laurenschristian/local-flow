@@ -40,6 +40,37 @@ enum AudioDeviceManager {
         inputDevices().first { $0.uid == uid }?.id
     }
 
+    static func deviceName(forUID uid: String) -> String? {
+        inputDevices().first { $0.uid == uid }?.name
+    }
+
+    static func defaultInputDevice() -> AudioInputDevice? {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var id = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &id
+        ) == noErr, id != 0,
+              let uid = stringProperty(id, selector: kAudioDevicePropertyDeviceUID),
+              let name = stringProperty(id, selector: kAudioObjectPropertyName) else {
+            return nil
+        }
+        return AudioInputDevice(id: id, uid: uid, name: name)
+    }
+
+    /// Display name of the device recordings will actually use.
+    static func activeInputDeviceName() -> String {
+        if let uid = Settings.shared.selectedInputDeviceUID {
+            if let name = deviceName(forUID: uid) { return name }
+            return "Missing device (using default)"
+        }
+        return defaultInputDevice()?.name ?? "System default"
+    }
+
     private static func hasInputChannels(_ id: AudioDeviceID) -> Bool {
         var addr = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,

@@ -11,10 +11,20 @@ class HotkeyManager {
     private var tapTimes: [Date] = []
     private var isHolding: Bool = false
     private var holdStartTime: Date?
+    private var doubleTapAt: Date?
+    private var pendingStopWork: DispatchWorkItem?
     private var triggerKeyObserver: NSObjectProtocol?
     private var tripleTapPending: Bool = false
     private var healthCheckTimer: Timer?
-    private let maxHoldDuration: TimeInterval = 300 // 5 minutes max recording
+
+    // Toggle mode is meant for long dictation, so its watchdog is generous.
+    private var maxHoldDuration: TimeInterval {
+        recordingMode == .toggle ? 900 : 300
+    }
+
+    private var recordingMode: RecordingMode {
+        Settings.shared.recordingMode
+    }
 
     private var doubleTapThreshold: TimeInterval {
         Settings.shared.doubleTapInterval
@@ -111,6 +121,9 @@ class HotkeyManager {
     func stopMonitoring() {
         healthCheckTimer?.invalidate()
         healthCheckTimer = nil
+        pendingStopWork?.cancel()
+        pendingStopWork = nil
+        doubleTapAt = nil
 
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
@@ -171,28 +184,70 @@ class HotkeyManager {
                 let recentTaps = tapTimes.filter { now.timeIntervalSince($0) < doubleTapThreshold }
 
                 if recentTaps.count >= 3 {
-                    // Triple-tap: quick re-paste (no hold needed)
+                    // Third quick tap upgrades the double-tap to a triple-tap:
+                    // drop the pending stop from the quick release and re-paste.
                     print("[HotkeyManager] TRIPLE-TAP DETECTED!")
+                    pendingStopWork?.cancel()
+                    pendingStopWork = nil
                     tapTimes.removeAll()
+                    doubleTapAt = nil
                     DispatchQueue.main.async { [weak self] in
                         self?.onTripleTap?()
                     }
                 } else if recentTaps.count == 2 {
-                    // Double-tap: start recording (hold to continue)
+                    // Double-tap: start recording (hold to continue).
+                    // Keep tapTimes so a third tap can still become a triple-tap.
                     print("[HotkeyManager] DOUBLE-TAP DETECTED!")
                     isHolding = true
                     holdStartTime = Date()
-                    tapTimes.removeAll()
+                    doubleTapAt = now
                     DispatchQueue.main.async { [weak self] in
                         self?.onDoubleTap?()
                     }
                 }
-            } else if !isKeyPressed && isHolding {
-                print("[HotkeyManager] Key released - stopping")
+            } else if isKeyPressed && isHolding && recordingMode == .toggle {
+                // Toggle mode: recording is active and the key was pressed again.
+                let sinceDouble = doubleTapAt.map { Date().timeIntervalSince($0) } ?? .infinity
                 isHolding = false
                 holdStartTime = nil
-                DispatchQueue.main.async { [weak self] in
-                    self?.onKeyUp?()
+                doubleTapAt = nil
+                tapTimes.removeAll()
+                if sinceDouble < doubleTapThreshold {
+                    // Third quick tap right after the double-tap: triple-tap re-paste
+                    print("[HotkeyManager] TRIPLE-TAP DETECTED (toggle)!")
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onTripleTap?()
+                    }
+                } else {
+                    print("[HotkeyManager] Toggle stop")
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onKeyUp?()
+                    }
+                }
+            } else if !isKeyPressed && isHolding {
+                // Toggle mode ignores releases; only the next press stops.
+                guard recordingMode == .hold else {
+                    return Unmanaged.passUnretained(event)
+                }
+                isHolding = false
+                holdStartTime = nil
+                let sinceDouble = doubleTapAt.map { Date().timeIntervalSince($0) } ?? .infinity
+                if sinceDouble < doubleTapThreshold {
+                    // Released almost instantly: wait one threshold for a possible
+                    // third tap before finalizing, so triple-tap stays reachable.
+                    print("[HotkeyManager] Quick release - deferring stop briefly")
+                    let work = DispatchWorkItem { [weak self] in
+                        self?.pendingStopWork = nil
+                        self?.onKeyUp?()
+                    }
+                    pendingStopWork = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + doubleTapThreshold, execute: work)
+                } else {
+                    print("[HotkeyManager] Key released - stopping")
+                    doubleTapAt = nil
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onKeyUp?()
+                    }
                 }
             }
         }
