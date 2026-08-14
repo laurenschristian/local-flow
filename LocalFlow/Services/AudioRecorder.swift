@@ -32,19 +32,25 @@ class AudioRecorder {
         }
     }
 
-    func startRecording() {
+    // false = level metering only (settings meter); samples are discarded so a
+    // long-open meter doesn't grow memory unbounded.
+    private var collectSamples = true
+
+    func startRecording(collectSamples: Bool = true) {
+        self.collectSamples = collectSamples
         os_unfair_lock_lock(&samplesLock)
         recordedSamples.removeAll()
         recordedSamples.reserveCapacity(16000 * 30) // Pre-allocate for ~30 seconds
         os_unfair_lock_unlock(&samplesLock)
         currentLevel = 0.0
 
+        // Fresh engine every start: a reused engine keeps stale AUHAL state after
+        // the input device changes, and its cached formats go out of sync.
+        audioEngine = AVAudioEngine()
         guard let audioEngine = audioEngine else { return }
 
         let inputNode = audioEngine.inputNode
 
-        // Apply user-chosen input device to the AUHAL before reading the format,
-        // since outputFormat(forBus:) reflects whichever device the unit is bound to.
         if let uid = Settings.shared.selectedInputDeviceUID,
            let deviceID = AudioDeviceManager.deviceID(forUID: uid),
            let audioUnit = inputNode.audioUnit {
@@ -62,7 +68,14 @@ class AudioRecorder {
             }
         }
 
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        // outputFormat(forBus:) can report the PREVIOUS device's format after the
+        // AUHAL device swap above (observed: 44.1kHz stale vs 16kHz real -> tap
+        // delivers zero samples). Ask the AU for the actual hardware format instead.
+        let inputFormat = Self.hardwareInputFormat(of: inputNode) ?? inputNode.outputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            print("Input device reports invalid format, not recording")
+            return
+        }
 
         guard let whisperFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -76,6 +89,10 @@ class AudioRecorder {
 
         // Create converter once, reuse for all buffers
         audioConverter = AVAudioConverter(from: inputFormat, to: whisperFormat)
+        if audioConverter == nil {
+            print("Failed to create converter \(inputFormat) -> \(whisperFormat), not recording")
+            return
+        }
 
         // Defensive: AVAudioEngine raises an NSException (→ SIGABRT, uncatchable in Swift)
         // if a tap is already installed on this bus. Can happen after a stop that didn't
@@ -94,10 +111,26 @@ class AudioRecorder {
         }
     }
 
+    /// The device's true input format, read from the AUHAL (input scope, bus 1).
+    /// Unlike outputFormat(forBus:), this stays correct after a device swap.
+    private static func hardwareInputFormat(of node: AVAudioInputNode) -> AVAudioFormat? {
+        guard let audioUnit = node.audioUnit else { return nil }
+        var asbd = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        let status = AudioUnitGetProperty(
+            audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 1, &asbd, &size
+        )
+        guard status == noErr, asbd.mSampleRate > 0, asbd.mChannelsPerFrame > 0 else { return nil }
+        return AVAudioFormat(
+            standardFormatWithSampleRate: asbd.mSampleRate,
+            channels: AVAudioChannelCount(asbd.mChannelsPerFrame)
+        )
+    }
+
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
         // Calculate audio level using Accelerate framework would be faster,
         // but this is simple and runs on audio thread
-        if let channelData = buffer.floatChannelData?[0] {
+        if let channelData = buffer.floatChannelData?[0], buffer.frameLength >= 4 {
             let frames = Int(buffer.frameLength)
             var sum: Float = 0
             for i in stride(from: 0, to: frames, by: 4) { // Sample every 4th frame
@@ -113,7 +146,8 @@ class AudioRecorder {
             }
         }
 
-        guard let converter = audioConverter,
+        guard collectSamples,
+              let converter = audioConverter,
               let outputFormat = converter.outputFormat as AVAudioFormat? else { return }
 
         let ratio = outputFormat.sampleRate / converter.inputFormat.sampleRate

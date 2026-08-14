@@ -8,7 +8,7 @@ class ModelDownloader: ObservableObject {
     @Published var currentModel: WhisperModel?
     @Published var error: String?
 
-    private var downloadTask: URLSessionDownloadTask?
+    private var downloadJob: Task<(URL, URLResponse), Error>?
 
     private init() {}
 
@@ -23,8 +23,13 @@ class ModelDownloader: ObservableObject {
         let destination = Settings.shared.modelsDirectory.appendingPathComponent(model.rawValue)
 
         do {
-            let (tempURL, _) = try await downloadWithProgress(from: model.downloadURL, expectedSize: model.fileSize)
+            let job = Task { try await downloadWithProgress(from: model.downloadURL, expectedSize: model.fileSize) }
+            downloadJob = job
+            let (tempURL, _) = try await job.value
+            downloadJob = nil
 
+            // Re-download after a partial/corrupt file must not fail on moveItem
+            try? FileManager.default.removeItem(at: destination)
             try FileManager.default.moveItem(at: tempURL, to: destination)
 
             await MainActor.run {
@@ -51,6 +56,12 @@ class ModelDownloader: ObservableObject {
     private func downloadWithProgress(from url: URL, expectedSize: Int64) async throws -> (URL, URLResponse) {
         let (asyncBytes, response) = try await URLSession.shared.bytes(from: url)
 
+        // Without this check a 404/500 page gets saved as a "model" and
+        // reported as a successful download.
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw URLError(.badServerResponse)
+        }
+
         let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         FileManager.default.createFile(atPath: tempFile.path, contents: nil)
         let fileHandle = try FileHandle(forWritingTo: tempFile)
@@ -64,11 +75,12 @@ class ModelDownloader: ObservableObject {
             downloadedSize += 1
 
             if buffer.count >= 65536 {
+                try Task.checkCancellation()
                 try fileHandle.write(contentsOf: buffer)
                 buffer.removeAll(keepingCapacity: true)
 
                 if expectedSize > 0 {
-                    let prog = Double(downloadedSize) / Double(expectedSize)
+                    let prog = min(1.0, Double(downloadedSize) / Double(expectedSize))
                     await MainActor.run {
                         self.progress = prog
                     }
@@ -90,7 +102,8 @@ class ModelDownloader: ObservableObject {
     }
 
     func cancel() {
-        downloadTask?.cancel()
+        downloadJob?.cancel()
+        downloadJob = nil
         isDownloading = false
         currentModel = nil
         progress = 0

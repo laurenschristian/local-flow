@@ -84,6 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Welcome to LocalFlow"
         window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
 
         // Set size first, then center
         window.setContentSize(NSSize(width: 520, height: 440))
@@ -228,6 +229,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Instructions
         let instructionItem = NSMenuItem(title: "Double-tap \(settings.triggerKey.displayName) to record", action: nil, keyEquivalent: "")
         instructionItem.isEnabled = false
+        instructionItem.tag = 5
         menu.addItem(instructionItem)
 
         menu.addItem(NSMenuItem.separator())
@@ -259,8 +261,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         // Refresh the mic submenu so newly-connected devices (e.g. AirPods) appear.
-        guard let micItem = menu.item(withTag: 4) else { return }
-        micItem.submenu = buildMicrophoneSubmenu()
+        if let micItem = menu.item(withTag: 4) {
+            micItem.submenu = buildMicrophoneSubmenu()
+        }
+        if let modelItem = menu.item(withTag: 2) {
+            modelItem.title = "Model: \(settings.selectedModel.shortName)"
+        }
+        if let instructionItem = menu.item(withTag: 5) {
+            instructionItem.title = "Double-tap \(settings.triggerKey.displayName) to record"
+        }
     }
 
     private func buildMicrophoneSubmenu() -> NSMenu {
@@ -326,6 +335,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "LocalFlow Settings"
         window.styleMask = [.titled, .closable]
+        // We keep a strong reference and reopen this window; the default
+        // release-on-close would make the second open a use-after-free.
+        window.isReleasedWhenClosed = false
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -349,11 +361,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         hotkeyManager.onTripleTap = { [weak self] in
+            self?.cancelRecordingIfNeeded()
             self?.quickRepaste()
         }
 
         hotkeyManager.startMonitoring()
         print("[LocalFlow] Hotkey monitoring started")
+    }
+
+    /// A triple-tap arrives right after its own double-tap started a recording;
+    /// discard that accidental recording without transcribing it.
+    private func cancelRecordingIfNeeded() {
+        guard AppState.shared.status == .recording else { return }
+        liveTranscriptionTask?.cancel()
+        liveTranscriptionTask = nil
+        _ = audioRecorder.stopRecording()
+        updateMenuBarIcon(recording: false)
+        RecordingOverlayController.shared.hide()
+        AppState.shared.status = .idle
     }
 
     private func quickRepaste() {
@@ -407,6 +432,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func startRecording() {
+        // An error state must not brick the hotkey: recover to idle and record.
+        if case .error = AppState.shared.status {
+            AppState.shared.status = .idle
+        }
         guard AppState.shared.status == .idle else {
             print("[LocalFlow] Cannot start recording - status is \(AppState.shared.status)")
             return
@@ -477,7 +506,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         guard let audioData = audioRecorder.stopRecording() else {
             print("[LocalFlow] No audio data recorded")
-            AppState.shared.status = .error(.noAudioRecorded)
+            failWithError(.noAudioRecorded)
             RecordingOverlayController.shared.hide()
             return
         }
@@ -495,7 +524,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if !loaded {
                     await MainActor.run {
                         RecordingOverlayController.shared.hide()
-                        AppState.shared.status = .error(.modelLoadFailed)
+                        self.failWithError(.modelLoadFailed)
                     }
                     return
                 }
@@ -540,8 +569,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     self.activeAppBundleId = nil
                 case .failure(let error):
                     print("[LocalFlow] Transcription error: \(error)")
-                    AppState.shared.status = .error(.transcriptionFailed)
+                    self.failWithError(.transcriptionFailed)
                 }
+            }
+        }
+    }
+
+    /// Show an error briefly, then recover to idle so the hotkey keeps working.
+    private func failWithError(_ error: AppError) {
+        AppState.shared.status = .error(error)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            if case .error = AppState.shared.status {
+                AppState.shared.status = .idle
             }
         }
     }

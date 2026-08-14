@@ -12,12 +12,21 @@ class RecordingOverlayController {
 
     func show() {
         DispatchQueue.main.async { [weak self] in
-            self?.viewModel.status = .recording
-            self?.viewModel.isVisible = true
-            self?.viewModel.audioLevel = 0
-            self?.viewModel.partialText = ""
-            self?.viewModel.previousText = ""
-            self?.createAndShowWindow()
+            guard let self else { return }
+            self.viewModel.status = .recording
+            self.viewModel.isVisible = true
+            self.viewModel.audioLevel = 0
+            self.viewModel.partialText = ""
+            self.viewModel.previousText = ""
+            self.viewModel.micName = AudioDeviceManager.activeInputDeviceName()
+            self.viewModel.recordingStart = Date()
+            self.viewModel.peakLevel = 0
+            self.viewModel.smoothedLevel = 0
+            self.viewModel.showsSilenceHint = false
+            self.viewModel.stopHint = Settings.shared.recordingMode == .toggle
+                ? "Tap \(Settings.shared.triggerKey.displayName) to stop"
+                : nil
+            self.createAndShowWindow()
         }
     }
 
@@ -42,7 +51,21 @@ class RecordingOverlayController {
 
     func updateAudioLevel(_ level: Float) {
         DispatchQueue.main.async { [weak self] in
-            self?.viewModel.audioLevel = CGFloat(level)
+            guard let vm = self?.viewModel else { return }
+            vm.audioLevel = CGFloat(level)
+            vm.peakLevel = max(vm.peakLevel, CGFloat(level))
+            // Fast attack, slow decay: keeps the waveform lively without jitter.
+            let target = CGFloat(level)
+            vm.smoothedLevel = target > vm.smoothedLevel
+                ? vm.smoothedLevel * 0.4 + target * 0.6
+                : vm.smoothedLevel * 0.85 + target * 0.15
+            // Surface a dead mic while recording instead of failing silently after.
+            let elapsed = Date().timeIntervalSince(vm.recordingStart)
+            let silent = vm.status == .recording && elapsed > 2.5 && vm.peakLevel < 0.02
+            if vm.showsSilenceHint != silent {
+                vm.showsSilenceHint = silent
+                self?.resizeWindowIfNeeded()
+            }
         }
     }
 
@@ -124,6 +147,13 @@ class RecordingOverlayViewModel: ObservableObject {
     @Published var audioLevel: CGFloat = 0
     @Published var partialText: String = ""
     @Published var previousText: String = ""
+    @Published var micName: String = ""
+    @Published var showsSilenceHint: Bool = false
+    @Published var stopHint: String?
+    var recordingStart: Date = .distantPast
+    var peakLevel: CGFloat = 0
+    // Read every frame by the TimelineView canvas; not published on purpose.
+    var smoothedLevel: CGFloat = 0
 
     func updateText(_ newText: String) {
         previousText = partialText
@@ -166,18 +196,44 @@ struct RecordingOverlayView: View {
             // Status indicator with improved waveform
             HStack(spacing: 14) {
                 if viewModel.status == .recording {
-                    ImprovedWaveView(level: viewModel.audioLevel)
+                    WaveformView(viewModel: viewModel)
                         .frame(width: 48, height: 32)
                 } else {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .tint(.white)
+                    PulsingDotsView()
                         .frame(width: 48, height: 32)
                 }
 
-                Text(viewModel.status == .recording ? "Listening..." : "Processing...")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.9))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(viewModel.status == .recording ? "Listening..." : "Processing...")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.9))
+
+                    if !viewModel.micName.isEmpty {
+                        Text(viewModel.micName)
+                            .font(.system(size: 11, weight: .regular, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.45))
+                            .lineLimit(1)
+                    }
+                }
+
+                if viewModel.status == .recording, let hint = viewModel.stopHint {
+                    Spacer(minLength: 12)
+                    Text(hint)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .lineLimit(1)
+                }
+            }
+
+            if viewModel.showsSilenceHint {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("No audio detected. Check your microphone.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                }
+                .foregroundStyle(.orange)
+                .transition(.opacity)
             }
 
             // Live transcription - shows latest text, scrolls away old
@@ -254,64 +310,58 @@ struct GlassBackground: View {
     }
 }
 
-/// Improved waveform visualization with gradient and smooth animation
-struct ImprovedWaveView: View {
-    let level: CGFloat
-    private let barCount = 7
+/// Frame-driven waveform: continuous motion from a per-frame canvas, amplitude
+/// from the smoothed mic level. No SwiftUI animation churn, no jitter.
+struct WaveformView: View {
+    @ObservedObject var viewModel: RecordingOverlayViewModel
+    private let barCount = 5
+    private let barWidth: CGFloat = 4
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<barCount, id: \.self) { index in
-                ImprovedWaveBar(
-                    height: barHeight(for: index),
-                    index: index,
-                    totalBars: barCount
-                )
+        TimelineView(.animation) { timeline in
+            Canvas { context, size in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let level = min(1, viewModel.smoothedLevel * 1.6)
+                let spacing = (size.width - CGFloat(barCount) * barWidth) / CGFloat(barCount - 1)
+                let center = CGFloat(barCount - 1) / 2
+
+                for i in 0..<barCount {
+                    let dist = abs(CGFloat(i) - center) / max(center, 1)
+                    let weight = 1.0 - dist * 0.45
+                    let wobble = 0.5 + 0.5 * sin(t * 7 + Double(i) * 1.15)
+                    let height = 4 + (size.height - 4) * level * weight * (0.55 + 0.45 * wobble)
+                    let rect = CGRect(
+                        x: CGFloat(i) * (barWidth + spacing),
+                        y: (size.height - height) / 2,
+                        width: barWidth,
+                        height: height
+                    )
+                    context.fill(
+                        Path(roundedRect: rect, cornerRadius: barWidth / 2),
+                        with: .color(.white.opacity(0.95 - Double(dist) * 0.3))
+                    )
+                }
             }
         }
     }
-
-    private func barHeight(for index: Int) -> CGFloat {
-        let baseHeight: CGFloat = 0.12
-        let centerIndex = CGFloat(barCount - 1) / 2.0
-        let distance = abs(CGFloat(index) - centerIndex)
-        let centerWeight = 1.0 - (distance / centerIndex) * 0.5
-
-        // Create wave-like variation
-        let phase = Double(index) * 0.8 + Double(level) * 12
-        let variation = sin(phase) * 0.2
-
-        let height = baseHeight + (level * centerWeight * 0.9) + variation
-        return max(0.08, min(1.0, height))
-    }
 }
 
-struct ImprovedWaveBar: View {
-    let height: CGFloat
-    let index: Int
-    let totalBars: Int
-
-    private var barGradient: LinearGradient {
-        let centerIndex = CGFloat(totalBars - 1) / 2.0
-        let distance = abs(CGFloat(index) - centerIndex) / centerIndex
-        let opacity = 1.0 - (distance * 0.4)
-
-        return LinearGradient(
-            colors: [
-                .white.opacity(opacity),
-                .white.opacity(opacity * 0.7)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
-
+/// Three softly pulsing dots for the transcribing state.
+struct PulsingDotsView: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: 2.5)
-            .fill(barGradient)
-            .frame(width: 4, height: 6 + 22 * height)
-            .shadow(color: .white.opacity(0.3), radius: 2)
-            .animation(.easeOut(duration: 0.08), value: height)
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 6) {
+                ForEach(0..<3, id: \.self) { i in
+                    let phase = max(0, sin(t * 4 - Double(i) * 0.7))
+                    Circle()
+                        .fill(.white.opacity(0.4 + 0.5 * phase))
+                        .frame(width: 6, height: 6)
+                        .scaleEffect(1 + 0.3 * phase)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 }
 

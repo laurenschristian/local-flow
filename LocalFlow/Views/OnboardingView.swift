@@ -339,7 +339,7 @@ struct OnboardingView: View {
                 .font(.system(size: 26, weight: .bold, design: .rounded))
 
             VStack(alignment: .leading, spacing: 14) {
-                InstructionRow(icon: "keyboard", text: "Double-tap Option key to start recording")
+                InstructionRow(icon: "keyboard", text: "Double-tap \(settings.triggerKey.displayName) to start recording")
                 InstructionRow(icon: "waveform", text: "Hold while speaking")
                 InstructionRow(icon: "text.cursor", text: "Release to transcribe and paste")
             }

@@ -42,6 +42,7 @@ actor WhisperService {
         // Use Metal acceleration on Apple Silicon
         #if arch(arm64)
         params.use_gpu = true
+        params.flash_attn = true // lower memory + faster attention on Metal
         #endif
 
         guard let ctx = whisper_init_from_file_with_params(path, params) else {

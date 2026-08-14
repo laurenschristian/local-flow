@@ -124,6 +124,27 @@ enum TranscriptionLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+enum RecordingMode: String, CaseIterable, Identifiable {
+    case hold = "hold"
+    case toggle = "toggle"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .hold: return "Hold to talk"
+        case .toggle: return "Tap to start / stop"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .hold: return "Double-tap and keep holding while you speak"
+        case .toggle: return "Double-tap to start, tap once to stop. Best for long dictation"
+        }
+    }
+}
+
 enum TriggerKey: String, CaseIterable, Identifiable {
     case option = "option"
     case rightOption = "rightOption"
@@ -166,6 +187,12 @@ class Settings: ObservableObject {
         didSet {
             defaults.set(triggerKey.rawValue, forKey: "triggerKey")
             NotificationCenter.default.post(name: .triggerKeyChanged, object: nil)
+        }
+    }
+
+    @Published var recordingMode: RecordingMode {
+        didSet {
+            defaults.set(recordingMode.rawValue, forKey: "recordingMode")
         }
     }
 
@@ -280,6 +307,9 @@ class Settings: ObservableObject {
 
         let savedTriggerKey = defaults.string(forKey: "triggerKey") ?? TriggerKey.fn.rawValue
         self.triggerKey = TriggerKey(rawValue: savedTriggerKey) ?? .fn
+
+        let savedMode = defaults.string(forKey: "recordingMode") ?? RecordingMode.hold.rawValue
+        self.recordingMode = RecordingMode(rawValue: savedMode) ?? .hold
 
         self.doubleTapInterval = defaults.double(forKey: "doubleTapInterval").nonZero ?? 0.3
         self.punctuationMode = defaults.bool(forKey: "punctuationMode")
