@@ -300,6 +300,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         liveTranscriptionTask?.cancel()
         liveTranscriptionTask = nil
         _ = audioRecorder.stopRecording()
+        MediaPauseController.shared.resumeAfterRecording()
         updateMenuBarIcon(recording: false)
         RecordingOverlayController.shared.hide()
         AppState.shared.status = .idle
@@ -372,6 +373,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("[LocalFlow] Recording for app: \(bundleId)")
         }
 
+        if settings.pauseMediaWhileRecording {
+            MediaPauseController.shared.pauseForRecording()
+        }
+
         if settings.soundFeedback {
             startSound?.play()
         }
@@ -427,6 +432,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("[LocalFlow] Stopping recording and transcribing...")
         AppState.shared.status = .transcribing
         updateMenuBarIcon(recording: false)
+        MediaPauseController.shared.resumeAfterRecording()
         RecordingOverlayController.shared.updateStatus(.transcribing)
 
         guard let rawAudio = audioRecorder.stopRecording() else {
