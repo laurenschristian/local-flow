@@ -7,9 +7,9 @@ enum AppStyle {
     // MARK: - Colors
 
     enum Colors {
-        /// Primary brand color - deep navy blue
-        /// Hex: #001847 | RGB: 0, 24, 71
-        static let brand = Color(red: 0, green: 0.094, blue: 0.278)
+        /// Primary brand color - graphite
+        /// Hex: #1C1F24
+        static let brand = Color(red: 0.11, green: 0.122, blue: 0.141)
 
         /// Brand gradient for backgrounds
         static let brandGradient = LinearGradient(
@@ -56,22 +56,22 @@ enum AppStyle {
     // MARK: - Typography
 
     enum Typography {
-        static let titleFont = Font.system(size: 16, weight: .semibold, design: .rounded)
-        static let bodyFont = Font.system(size: 14, weight: .medium, design: .rounded)
-        static let captionFont = Font.system(size: 12, weight: .regular, design: .rounded)
+        static let titleFont = Font.system(size: 16, weight: .semibold)
+        static let bodyFont = Font.system(size: 14, weight: .medium)
+        static let captionFont = Font.system(size: 12, weight: .regular)
 
-        static let overlayTitle = Font.system(size: 14, weight: .semibold, design: .rounded)
-        static let overlayBody = Font.system(size: 15, weight: .medium, design: .rounded)
+        static let overlayTitle = Font.system(size: 14, weight: .semibold)
+        static let overlayBody = Font.system(size: 15, weight: .medium)
     }
 
     // MARK: - Layout
 
     enum Layout {
         /// Standard corner radius for cards and overlays
-        static let cornerRadius: CGFloat = 20
+        static let cornerRadius: CGFloat = 10
 
         /// Smaller corner radius for buttons and inputs
-        static let cornerRadiusSmall: CGFloat = 12
+        static let cornerRadiusSmall: CGFloat = 6
 
         /// Standard padding
         static let paddingSmall: CGFloat = 8

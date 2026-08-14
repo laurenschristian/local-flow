@@ -83,23 +83,21 @@ struct SettingsView: View {
                 // App branding
                 VStack(spacing: 10) {
                     ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.2), .white.opacity(0.05)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(.white.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(.white.opacity(0.12), lineWidth: 1)
                             )
-                            .frame(width: 56, height: 56)
+                            .frame(width: 48, height: 48)
 
                         Image(systemName: "waveform")
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundColor(.white)
                     }
 
                     Text("LocalFlow")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
 
                     // Status pill
@@ -114,8 +112,8 @@ struct SettingsView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(
-                        Capsule()
-                            .fill(.white.opacity(0.1))
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(.white.opacity(0.08))
                     )
                 }
                 .padding(.top, 24)
@@ -149,7 +147,7 @@ struct SettingsView: View {
                 // Stats footer
                 VStack(spacing: 4) {
                     Text("\(settings.wordsTranscribedToday)")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .font(.system(size: 32, weight: .bold))
                         .foregroundColor(.white)
 
                     Text("words today")
@@ -334,6 +332,14 @@ struct SettingsView: View {
                     title: "Cleanup mode",
                     description: "Fix punctuation and strip filler words with the on-device Apple model",
                     isOn: $settings.cleanupModeEnabled
+                )
+
+                CardDivider()
+
+                SettingsToggle(
+                    title: "Trim silence",
+                    description: "Skip pauses and dead air before transcribing, faster results",
+                    isOn: $settings.trimSilenceEnabled
                 )
 
                 CardDivider()
@@ -593,6 +599,10 @@ struct SettingsView: View {
                     Text("\(settings.transcriptionHistory.count) entries")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                    Button("Export...") {
+                        exportHistory()
+                    }
+                    .font(.system(size: 12, weight: .medium))
                     Button("Clear All") {
                         settings.clearHistory()
                     }
@@ -647,7 +657,7 @@ struct SettingsView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
                 )
 
@@ -702,7 +712,7 @@ struct SettingsView: View {
 
             VStack(spacing: 8) {
                 Text("LocalFlow")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.system(size: 32, weight: .bold))
 
                 Text("Version \(version) (Build \(build))")
                     .font(.system(size: 13))
@@ -769,6 +779,20 @@ struct SettingsView: View {
         _ = AXIsProcessTrustedWithOptions(options)
     }
 
+    private func exportHistory() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "LocalFlow History.txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        let content = settings.transcriptionHistory
+            .map { "[\(formatter.string(from: $0.timestamp))]\n\($0.text)\n" }
+            .joined(separator: "\n")
+        try? content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     private func openMicrophoneSettings() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
     }
@@ -779,30 +803,10 @@ struct SettingsView: View {
 struct SidebarGlassBackground: View {
     var body: some View {
         ZStack {
-            // Gradient base
-            LinearGradient(
-                colors: [
-                    AppStyle.Colors.brand,
-                    AppStyle.Colors.brand.opacity(0.9)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            AppStyle.Colors.brand
 
-            // Noise texture overlay
             Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(0.1)
-
-            // Edge highlight
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [.white.opacity(0.15), .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+                .fill(.white.opacity(0.08))
                 .frame(width: 1)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -820,34 +824,17 @@ struct GlassCard<Content: View>: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(colorScheme == .dark
-                    ? Color.white.opacity(0.06)
-                    : Color.white.opacity(0.8))
-                .background {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .opacity(colorScheme == .dark ? 0.5 : 0.3)
-                }
+                    ? Color.white.opacity(0.05)
+                    : Color.white)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: colorScheme == .dark
-                            ? [.white.opacity(0.2), .white.opacity(0.05), .clear]
-                            : [.black.opacity(0.1), .black.opacity(0.05), .clear],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(colorScheme == .dark
+                    ? Color.white.opacity(0.12)
+                    : Color.black.opacity(0.1), lineWidth: 1)
         }
-        .shadow(
-            color: colorScheme == .dark ? .black.opacity(0.3) : .black.opacity(0.08),
-            radius: colorScheme == .dark ? 8 : 4,
-            y: colorScheme == .dark ? 4 : 2
-        )
     }
 }
 
@@ -881,10 +868,10 @@ struct SidebarNavButton: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? .white.opacity(0.2) : .clear)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? .white.opacity(0.12) : .clear)
             )
-            .foregroundColor(.white.opacity(isSelected ? 1 : 0.75))
+            .foregroundColor(.white.opacity(isSelected ? 1 : 0.7))
         }
         .buttonStyle(.plain)
     }
@@ -925,7 +912,7 @@ struct HintCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(isError
                     ? Color.red.opacity(colorScheme == .dark ? 0.15 : 0.1)
                     : (colorScheme == .dark ? Color.white.opacity(0.08) : AppStyle.Colors.brand.opacity(0.08)))

@@ -63,7 +63,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 8) {
                 Text("Welcome to LocalFlow")
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(.system(size: 26, weight: .bold))
 
                 Text("Voice-to-text that runs entirely on your Mac.\nNo internet required, completely private.")
                     .multilineTextAlignment(.center)
@@ -101,7 +101,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 8) {
                 Text("Accessibility Permission")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.system(size: 22, weight: .bold))
 
                 Text("LocalFlow needs accessibility access to detect\nyour hotkey and insert transcribed text.")
                     .multilineTextAlignment(.center)
@@ -188,7 +188,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 8) {
                 Text("Microphone Permission")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.system(size: 22, weight: .bold))
 
                 Text("LocalFlow needs microphone access to\nrecord your voice for transcription.")
                     .multilineTextAlignment(.center)
@@ -252,7 +252,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 8) {
                 Text("Download Speech Model")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.system(size: 22, weight: .bold))
 
                 if settings.hasAnyModel() {
                     HStack(spacing: 8) {
@@ -336,7 +336,7 @@ struct OnboardingView: View {
             }
 
             Text("You're All Set!")
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.system(size: 26, weight: .bold))
 
             VStack(alignment: .leading, spacing: 14) {
                 InstructionRow(icon: "keyboard", text: "Double-tap \(settings.triggerKey.displayName) to start recording")

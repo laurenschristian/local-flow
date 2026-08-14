@@ -211,12 +211,12 @@ struct RecordingOverlayView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(viewModel.status == .recording ? "Listening..." : "Processing...")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.white.opacity(0.9))
 
                     if !viewModel.micName.isEmpty {
                         Text(viewModel.micName)
-                            .font(.system(size: 11, weight: .regular, design: .rounded))
+                            .font(.system(size: 11, weight: .regular))
                             .foregroundStyle(.white.opacity(0.45))
                             .lineLimit(1)
                     }
@@ -225,7 +225,7 @@ struct RecordingOverlayView: View {
                 if viewModel.status == .recording, let hint = viewModel.stopHint {
                     Spacer(minLength: 12)
                     Text(hint)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.4))
                         .lineLimit(1)
                 }
@@ -236,7 +236,7 @@ struct RecordingOverlayView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11, weight: .semibold))
                     Text("No audio detected. Check your microphone.")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.system(size: 12, weight: .medium))
                 }
                 .foregroundStyle(.orange)
                 .transition(.opacity)
@@ -253,7 +253,7 @@ struct RecordingOverlayView: View {
                         .foregroundColor(.white)
                         .bold()
                     )
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .font(.system(size: 16, weight: .medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .shadow(color: .white.opacity(0.25), radius: 6)
