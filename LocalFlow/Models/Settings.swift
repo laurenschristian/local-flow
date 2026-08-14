@@ -8,6 +8,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     case base = "ggml-base.bin"
     case small = "ggml-small.bin"
     case medium = "ggml-medium.bin"
+    case turbo = "ggml-large-v3-turbo-q5_0.bin"
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .base: return "Base (142MB) - Fast"
         case .small: return "Small (488MB) - Recommended"
         case .medium: return "Medium (1.5GB) - Accurate"
+        case .turbo: return "Turbo (574MB) - Best accuracy, fast"
         }
     }
 
@@ -26,6 +28,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .base: return "Base"
         case .small: return "Small"
         case .medium: return "Medium"
+        case .turbo: return "Turbo"
         }
     }
 
@@ -34,7 +37,8 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .tiny: return "Basic"
         case .base: return "Good"
         case .small: return "Better"
-        case .medium: return "Best"
+        case .medium: return "Great"
+        case .turbo: return "Best"
         }
     }
 
@@ -44,6 +48,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .base: return .yellow
         case .small: return .green
         case .medium: return .blue
+        case .turbo: return .purple
         }
     }
 
@@ -58,6 +63,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .base: return 142_000_000
         case .small: return 488_000_000
         case .medium: return 1_500_000_000
+        case .turbo: return 574_000_000
         }
     }
 
@@ -282,6 +288,25 @@ class Settings: ObservableObject {
         }
     }
 
+    // Names and jargon passed to Whisper as an initial prompt to bias recognition
+    @Published var customVocabulary: String {
+        didSet {
+            defaults.set(customVocabulary, forKey: "customVocabulary")
+        }
+    }
+
+    @Published var spokenCommandsEnabled: Bool {
+        didSet {
+            defaults.set(spokenCommandsEnabled, forKey: "spokenCommandsEnabled")
+        }
+    }
+
+    @Published var cleanupModeEnabled: Bool {
+        didSet {
+            defaults.set(cleanupModeEnabled, forKey: "cleanupModeEnabled")
+        }
+    }
+
     var modelPath: String {
         let modelsDir = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -342,6 +367,10 @@ class Settings: ObservableObject {
 
         // Input device (nil = system default)
         self.selectedInputDeviceUID = defaults.string(forKey: "selectedInputDeviceUID")
+
+        self.customVocabulary = defaults.string(forKey: "customVocabulary") ?? ""
+        self.spokenCommandsEnabled = defaults.object(forKey: "spokenCommandsEnabled") as? Bool ?? true
+        self.cleanupModeEnabled = defaults.bool(forKey: "cleanupModeEnabled")
 
         // Migrate from English-only model selection
         migrateFromEnglishModels()
@@ -414,9 +443,13 @@ class Settings: ObservableObject {
     func addToHistory(_ text: String) {
         let entry = TranscriptionEntry(text: text, timestamp: Date())
         transcriptionHistory.insert(entry, at: 0)
-        if transcriptionHistory.count > 50 {
-            transcriptionHistory = Array(transcriptionHistory.prefix(50))
+        if transcriptionHistory.count > 200 {
+            transcriptionHistory = Array(transcriptionHistory.prefix(200))
         }
+    }
+
+    func removeFromHistory(_ id: UUID) {
+        transcriptionHistory.removeAll { $0.id == id }
     }
 
     func clearHistory() {

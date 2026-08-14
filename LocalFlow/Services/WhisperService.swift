@@ -113,21 +113,13 @@ actor WhisperService {
         params.suppress_blank = true
         params.suppress_nst = true
 
-        // Run transcription with selected language (nil = auto-detect)
-        let languageCode = await MainActor.run { Settings.shared.language.whisperCode }
-        let result: Int32
-        if let langCode = languageCode {
-            result = langCode.withCString { langPtr in
-                params.language = langPtr
-                return audioData.withUnsafeBufferPointer { buffer in
-                    whisper_full(ctx, params, buffer.baseAddress, Int32(audioData.count))
-                }
-            }
-        } else {
-            result = audioData.withUnsafeBufferPointer { buffer in
-                whisper_full(ctx, params, buffer.baseAddress, Int32(audioData.count))
-            }
+        // Run transcription with selected language (nil = auto-detect) and
+        // the user's custom vocabulary as an initial prompt.
+        let (languageCode, vocabulary) = await MainActor.run { () -> (String?, String?) in
+            let vocab = Settings.shared.customVocabulary.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (Settings.shared.language.whisperCode, vocab.isEmpty ? nil : vocab)
         }
+        let result = Self.runWhisper(ctx: ctx, params: params, language: languageCode, prompt: vocabulary, audio: audioData)
 
         guard result == 0 else {
             return .failure(.transcriptionFailed("whisper_full returned \(result)"))
@@ -152,6 +144,39 @@ actor WhisperService {
         }
 
         return .success(transcription.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    // The C strings must stay alive through the whisper_full call, hence the
+    // nested withCString scopes instead of assigning pointers up front.
+    private static func runWhisper(ctx: OpaquePointer, params: whisper_full_params, language: String?, prompt: String?, audio: [Float]) -> Int32 {
+        var p = params
+        func exec() -> Int32 {
+            audio.withUnsafeBufferPointer { buffer in
+                whisper_full(ctx, p, buffer.baseAddress, Int32(audio.count))
+            }
+        }
+        switch (language, prompt) {
+        case let (lang?, voc?):
+            return lang.withCString { l in
+                voc.withCString { v in
+                    p.language = l
+                    p.initial_prompt = v
+                    return exec()
+                }
+            }
+        case let (lang?, nil):
+            return lang.withCString { l in
+                p.language = l
+                return exec()
+            }
+        case let (nil, voc?):
+            return voc.withCString { v in
+                p.initial_prompt = v
+                return exec()
+            }
+        case (nil, nil):
+            return exec()
+        }
     }
 
     func unloadModel() {
