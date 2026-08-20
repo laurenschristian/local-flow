@@ -265,6 +265,27 @@ struct SettingsView: View {
                         .frame(width: 180, height: 8)
                 }
 
+                if AudioDeviceManager.systemInputIsBluetoothHeadset(), let builtIn = AudioDeviceManager.builtInInputDevice() {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.orange)
+                        Text("macOS is holding your Bluetooth headphones in call mode because they are the system input. Music plays at half quality until you switch.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        Button("Use \(builtIn.name)") {
+                            AudioDeviceManager.setSystemDefaultInput(builtIn.id)
+                            inputDevices = AudioDeviceManager.inputDevices()
+                            micMonitor.restart()
+                        }
+                        .font(.system(size: 11))
+                    }
+                    .padding(.top, 8)
+                }
+
                 if micMonitor.looksSilent {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")

@@ -83,7 +83,8 @@ enum AudioDeviceManager {
     /// system default is a Bluetooth headset: opening that mic forces the
     /// headset into call mode, which wrecks whatever is playing through it.
     static func recordingDeviceID() -> AudioDeviceID? {
-        if let uid = Settings.shared.selectedInputDeviceUID { return deviceID(forUID: uid) }
+        // A missing pick falls through to the Bluetooth guard, never to the headset.
+        if let uid = Settings.shared.selectedInputDeviceUID, let id = deviceID(forUID: uid) { return id }
         guard Settings.shared.avoidBluetoothMic,
               let current = defaultInputDevice(), isBluetooth(current.id),
               let builtIn = builtInInputDevice() else { return nil }
@@ -101,6 +102,30 @@ enum AudioDeviceManager {
 
     static func transportType(_ id: AudioDeviceID) -> UInt32? {
         property(id, kAudioDevicePropertyTransportType)
+    }
+
+    /// macOS keeps a Bluetooth headset in call mode (half sample rate, muffled or
+    /// silent music) whenever it is the system input, no matter which mic apps use.
+    static func systemInputIsBluetoothHeadset() -> Bool {
+        guard let input = defaultInputDevice(), isBluetooth(input.id) else { return false }
+        guard let output: AudioDeviceID = property(
+            AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice
+        ) else { return false }
+        return isBluetooth(output)
+    }
+
+    @discardableResult
+    static func setSystemDefaultInput(_ id: AudioDeviceID) -> Bool {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value = id
+        return AudioObjectSetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil,
+            UInt32(MemoryLayout<AudioDeviceID>.size), &value
+        ) == noErr
     }
 
     static func defaultOutputSampleRate() -> Float64? {
