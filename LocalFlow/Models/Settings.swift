@@ -288,6 +288,13 @@ class Settings: ObservableObject {
         }
     }
 
+    // Bluetooth mics force headsets into call mode, which kills music playback
+    @Published var avoidBluetoothMic: Bool {
+        didSet {
+            defaults.set(avoidBluetoothMic, forKey: "avoidBluetoothMic")
+        }
+    }
+
     // Names and jargon passed to Whisper as an initial prompt to bias recognition
     @Published var customVocabulary: String {
         didSet {
@@ -380,6 +387,7 @@ class Settings: ObservableObject {
         // Input device (nil = system default)
         self.selectedInputDeviceUID = defaults.string(forKey: "selectedInputDeviceUID")
 
+        self.avoidBluetoothMic = defaults.object(forKey: "avoidBluetoothMic") as? Bool ?? true
         self.customVocabulary = defaults.string(forKey: "customVocabulary") ?? ""
         self.spokenCommandsEnabled = defaults.object(forKey: "spokenCommandsEnabled") as? Bool ?? true
         self.cleanupModeEnabled = defaults.bool(forKey: "cleanupModeEnabled")

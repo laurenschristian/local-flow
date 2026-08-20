@@ -51,8 +51,7 @@ class AudioRecorder {
 
         let inputNode = audioEngine.inputNode
 
-        if let uid = Settings.shared.selectedInputDeviceUID,
-           let deviceID = AudioDeviceManager.deviceID(forUID: uid),
+        if let deviceID = AudioDeviceManager.recordingDeviceID(),
            let audioUnit = inputNode.audioUnit {
             var id = deviceID
             let status = AudioUnitSetProperty(

@@ -79,11 +79,45 @@ enum AudioDeviceManager {
         return AudioInputDevice(id: id, uid: uid, name: name)
     }
 
+    /// Device the recorder should open. Defaults to the built-in mic when the
+    /// system default is a Bluetooth headset: opening that mic forces the
+    /// headset into call mode, which wrecks whatever is playing through it.
+    static func recordingDeviceID() -> AudioDeviceID? {
+        if let uid = Settings.shared.selectedInputDeviceUID { return deviceID(forUID: uid) }
+        guard Settings.shared.avoidBluetoothMic,
+              let current = defaultInputDevice(), isBluetooth(current.id),
+              let builtIn = builtInInputDevice() else { return nil }
+        return builtIn.id
+    }
+
+    static func builtInInputDevice() -> AudioInputDevice? {
+        inputDevices().first { transportType($0.id) == kAudioDeviceTransportTypeBuiltIn }
+    }
+
+    static func isBluetooth(_ id: AudioDeviceID) -> Bool {
+        let type = transportType(id)
+        return type == kAudioDeviceTransportTypeBluetooth || type == kAudioDeviceTransportTypeBluetoothLE
+    }
+
+    static func transportType(_ id: AudioDeviceID) -> UInt32? {
+        property(id, kAudioDevicePropertyTransportType)
+    }
+
+    static func defaultOutputSampleRate() -> Float64? {
+        guard let device: AudioDeviceID = property(
+            AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice
+        ), device != 0 else { return nil }
+        return property(device, kAudioDevicePropertyNominalSampleRate)
+    }
+
     /// Display name of the device recordings will actually use.
     static func activeInputDeviceName() -> String {
         if let uid = Settings.shared.selectedInputDeviceUID {
             if let name = deviceName(forUID: uid) { return name }
             return "Missing device (using default)"
+        }
+        if let id = recordingDeviceID(), let device = inputDevices().first(where: { $0.id == id }) {
+            return "\(device.name) (Bluetooth mic avoided)"
         }
         return defaultInputDevice()?.name ?? "System default"
     }

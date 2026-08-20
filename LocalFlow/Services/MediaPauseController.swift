@@ -20,12 +20,14 @@ final class MediaPauseController {
     private let queue = DispatchQueue(label: "com.localflow.media-pause", qos: .userInitiated)
     private var pausedPlayers: [Player] = []
     private var pausedViaMediaKey = false
+    private var outputRateAtPause: Float64?
 
     private init() {}
 
     func pauseForRecording() {
         // Sample before our own start sound reaches the output device.
         let playingPIDs = Self.audioProducingPIDs()
+        let outputRate = AudioDeviceManager.defaultOutputSampleRate()
         queue.async {
             var paused: [Player] = []
             for player in Self.players where self.isRunning(player.bundleId) {
@@ -36,6 +38,7 @@ final class MediaPauseController {
             }
             self.pausedPlayers = paused
             self.pausedViaMediaKey = false
+            self.outputRateAtPause = outputRate
 
             guard paused.isEmpty, !playingPIDs.isEmpty else { return }
             Self.sendPlayPauseKey()
@@ -56,16 +59,17 @@ final class MediaPauseController {
     }
 
     func resumeAfterRecording() {
-        queue.async { self.resume() }
+        queue.async { self.resume(waitForOutput: true) }
     }
 
     /// Blocking variant for app termination, where a queued resume would never
     /// run and would leave the user's music paused for good.
     func resumeAfterRecordingNow() {
-        queue.sync { self.resume() }
+        queue.sync { self.resume(waitForOutput: false) }
     }
 
-    private func resume() {
+    private func resume(waitForOutput: Bool) {
+        if waitForOutput { waitForOutputDevice() }
         for player in pausedPlayers where isRunning(player.bundleId) {
             _ = runScript("tell application \"\(player.appName)\" to play")
         }
@@ -73,6 +77,17 @@ final class MediaPauseController {
         if pausedViaMediaKey {
             Self.sendPlayPauseKey()
             pausedViaMediaKey = false
+        }
+    }
+
+    /// A headset that just lent its mic comes back at call-mode sample rate;
+    /// resuming into that gives silence, so let the output device settle first.
+    private func waitForOutputDevice() {
+        guard let expected = outputRateAtPause else { return }
+        outputRateAtPause = nil
+        for _ in 0..<15 {
+            if AudioDeviceManager.defaultOutputSampleRate() == expected { return }
+            Thread.sleep(forTimeInterval: 0.1)
         }
     }
 
