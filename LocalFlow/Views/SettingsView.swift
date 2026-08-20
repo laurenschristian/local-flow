@@ -346,7 +346,7 @@ struct SettingsView: View {
 
                 SettingsToggle(
                     title: "Pause music while recording",
-                    description: "Pause Spotify or Apple Music during dictation, resume after",
+                    description: "Pause Spotify, Music, or any app playing sound during dictation, resume after",
                     isOn: $settings.pauseMediaWhileRecording
                 )
 
