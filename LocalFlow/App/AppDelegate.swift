@@ -46,6 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // This prevents the ggml_metal_rsets_free assertion failure
         hotkeyManager?.stopMonitoring()
         liveTranscriptionTask?.cancel()
+        MediaPauseController.shared.resumeAfterRecordingNow()
 
         // Synchronously unload the model to free Metal resources properly
         let semaphore = DispatchSemaphore(value: 0)
