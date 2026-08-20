@@ -247,6 +247,14 @@ struct SettingsView: View {
 
                 CardDivider()
 
+                SettingsToggle(
+                    title: "Keep Bluetooth headphones in music mode",
+                    description: "Record from the built-in mic instead, so AirPods do not drop to call quality",
+                    isOn: $settings.avoidBluetoothMic
+                )
+
+                CardDivider()
+
                 HStack(spacing: 12) {
                     Text("Input level")
                         .font(.system(size: 13, weight: .medium))
