@@ -28,13 +28,15 @@ class TextInserter {
         let savedClipboard = saveClipboard()
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        let ourChangeCount = pasteboard.changeCount
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.simulatePaste()
-            // Restore on a slight delay so the target app has time to read the
-            // pasted contents before we overwrite them with the original.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                self?.restoreClipboard(savedClipboard)
+            // Slow targets (Electron, remote desktops) read the pasteboard late,
+            // so hold the text long enough that they never paste the old value.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let self, self.pasteboard.changeCount == ourChangeCount else { return }
+                self.restoreClipboard(savedClipboard)
             }
         }
     }

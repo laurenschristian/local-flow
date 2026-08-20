@@ -8,24 +8,48 @@ struct AudioInputDevice: Equatable {
 }
 
 enum AudioDeviceManager {
-    static func inputDevices() -> [AudioInputDevice] {
+    /// Generic CoreAudio property read, shared with MediaPauseController.
+    static func property<T>(
+        _ id: AudioObjectID,
+        _ selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal
+    ) -> T? {
         var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
+            mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain
         )
+        var size = UInt32(MemoryLayout<T>.size)
+        let value = UnsafeMutablePointer<T>.allocate(capacity: 1)
+        defer { value.deallocate() }
+        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, value) == noErr else { return nil }
+        return value.pointee
+    }
 
+    /// Generic CoreAudio array-property read (device lists, process lists).
+    static func propertyList<T>(
+        _ id: AudioObjectID,
+        _ selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal
+    ) -> [T] {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain
+        )
         var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(
-            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size
-        ) == noErr else { return [] }
+        guard AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size) == noErr, size > 0 else {
+            return []
+        }
+        let buffer = UnsafeMutableBufferPointer<T>.allocate(
+            capacity: Int(size) / MemoryLayout<T>.stride
+        )
+        defer { buffer.deallocate() }
+        guard let base = buffer.baseAddress,
+              AudioObjectGetPropertyData(id, &addr, 0, nil, &size, base) == noErr else { return [] }
+        return Array(UnsafeBufferPointer(start: base, count: Int(size) / MemoryLayout<T>.stride))
+    }
 
-        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
-        var ids = [AudioDeviceID](repeating: 0, count: count)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &ids
-        ) == noErr else { return [] }
-
+    static func inputDevices() -> [AudioInputDevice] {
+        let ids: [AudioDeviceID] = propertyList(
+            AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDevices
+        )
         return ids.compactMap { id in
             guard hasInputChannels(id),
                   let uid = stringProperty(id, selector: kAudioDevicePropertyDeviceUID),
@@ -45,16 +69,9 @@ enum AudioDeviceManager {
     }
 
     static func defaultInputDevice() -> AudioInputDevice? {
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var id = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &id
-        ) == noErr, id != 0,
+        guard let id: AudioDeviceID = property(
+            AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultInputDevice
+        ), id != 0,
               let uid = stringProperty(id, selector: kAudioDevicePropertyDeviceUID),
               let name = stringProperty(id, selector: kAudioObjectPropertyName) else {
             return nil

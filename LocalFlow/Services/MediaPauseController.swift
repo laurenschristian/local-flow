@@ -56,15 +56,23 @@ final class MediaPauseController {
     }
 
     func resumeAfterRecording() {
-        queue.async {
-            for player in self.pausedPlayers where self.isRunning(player.bundleId) {
-                _ = self.runScript("tell application \"\(player.appName)\" to play")
-            }
-            self.pausedPlayers = []
-            if self.pausedViaMediaKey {
-                Self.sendPlayPauseKey()
-                self.pausedViaMediaKey = false
-            }
+        queue.async { self.resume() }
+    }
+
+    /// Blocking variant for app termination, where a queued resume would never
+    /// run and would leave the user's music paused for good.
+    func resumeAfterRecordingNow() {
+        queue.sync { self.resume() }
+    }
+
+    private func resume() {
+        for player in pausedPlayers where isRunning(player.bundleId) {
+            _ = runScript("tell application \"\(player.appName)\" to play")
+        }
+        pausedPlayers = []
+        if pausedViaMediaKey {
+            Self.sendPlayPauseKey()
+            pausedViaMediaKey = false
         }
     }
 
@@ -116,65 +124,25 @@ final class MediaPauseController {
         guard #available(macOS 14.4, *) else {
             return isOutputDeviceRunning() ? [-1] : []
         }
-        var listAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyProcessObjectList,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
+        let processes: [AudioObjectID] = AudioDeviceManager.propertyList(
+            AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyProcessObjectList
         )
-        var dataSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(
-            AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &dataSize
-        ) == noErr, dataSize > 0 else { return [] }
-
-        var objects = [AudioObjectID](repeating: 0, count: Int(dataSize) / MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &dataSize, &objects
-        ) == noErr else { return [] }
-
         let ownPID = ProcessInfo.processInfo.processIdentifier
         var result: Set<pid_t> = []
-        for object in objects where processProperty(object, kAudioProcessPropertyIsRunningOutput, as: UInt32.self) == 1 {
-            if let pid = processProperty(object, kAudioProcessPropertyPID, as: pid_t.self), pid != ownPID {
-                result.insert(pid)
-            }
+        for process in processes {
+            guard AudioDeviceManager.property(process, kAudioProcessPropertyIsRunningOutput) == UInt32(1),
+                  let pid: pid_t = AudioDeviceManager.property(process, kAudioProcessPropertyPID),
+                  pid != ownPID else { continue }
+            result.insert(pid)
         }
         return result
     }
 
-    @available(macOS 14.4, *)
-    private static func processProperty<T>(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, as: T.Type) -> T? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: selector,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var size = UInt32(MemoryLayout<T>.size)
-        var value = UnsafeMutablePointer<T>.allocate(capacity: 1)
-        defer { value.deallocate() }
-        guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, value) == noErr else { return nil }
-        return value.pointee
-    }
-
     private static func isOutputDeviceRunning() -> Bool {
-        var deviceAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var device = AudioObjectID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &deviceAddress, 0, nil, &size, &device
-        ) == noErr, device != kAudioObjectUnknown else { return false }
-
-        var runningAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var running: UInt32 = 0
-        size = UInt32(MemoryLayout<UInt32>.size)
-        guard AudioObjectGetPropertyData(device, &runningAddress, 0, nil, &size, &running) == noErr else { return false }
-        return running != 0
+        guard let device: AudioObjectID = AudioDeviceManager.property(
+            AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice
+        ), device != kAudioObjectUnknown else { return false }
+        let running: UInt32? = AudioDeviceManager.property(device, kAudioDevicePropertyDeviceIsRunningSomewhere)
+        return (running ?? 0) != 0
     }
 }
