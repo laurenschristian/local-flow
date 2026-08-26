@@ -305,6 +305,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateMenuBarIcon(recording: false)
         RecordingOverlayController.shared.hide()
         AppState.shared.status = .idle
+        activeAppBundleId = nil
     }
 
     private func quickRepaste() {
@@ -365,6 +366,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard AppState.shared.status == .idle else {
             print("[LocalFlow] Cannot start recording - status is \(AppState.shared.status)")
+            // The hotkey manager already entered its holding state; drop it so
+            // the following release doesn't act on a recording that never started.
+            hotkeyManager.resetHoldState()
             return
         }
 
@@ -382,12 +386,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             startSound?.play()
         }
 
+        // The engine can fail to start (device vanished mid-tap, invalid format,
+        // converter failure). Never enter .recording in that case: the old code
+        // showed a live overlay over a dead mic and the user lost the dictation.
+        guard audioRecorder.startRecording() else {
+            print("[LocalFlow] Audio engine failed to start")
+            if settings.pauseMediaWhileRecording {
+                MediaPauseController.shared.resumeAfterRecording()
+            }
+            hotkeyManager.resetHoldState()
+            activeAppBundleId = nil
+            failWithError(.recordingFailed)
+            return
+        }
+
         print("[LocalFlow] Recording started")
         AppState.shared.status = .recording
         updateMenuBarIcon(recording: true)
         RecordingOverlayController.shared.show()
         RecordingOverlayController.shared.updateStatus(.recording)
-        audioRecorder.startRecording()
         startLiveTranscription()
     }
 
@@ -401,11 +418,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // transcription on stop still uses the complete audio.
             let livePreviewWindowSeconds = 8.0
 
-            while !Task.isCancelled && AppState.shared.status == .recording {
+            while !Task.isCancelled {
+                let isRecording = await MainActor.run { AppState.shared.status == .recording }
+                guard isRecording else { break }
                 if let samples = audioRecorder.getCurrentSamples(tailSeconds: livePreviewWindowSeconds),
                    samples.count > 16000 {
                     let result = await whisperService.transcribe(audioData: samples, onSegment: nil)
-                    if case .success(let text) = result, !text.isEmpty {
+                    // Re-check after the (slow) transcribe: without this, a stop or
+                    // new recording mid-flight got stale preview text painted over it.
+                    if case .success(let text) = result, !text.isEmpty, !Task.isCancelled {
                         await MainActor.run {
                             RecordingOverlayController.shared.updatePartialText(text)
                         }
@@ -476,7 +497,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             switch result {
             case .success(var text):
                 print("[LocalFlow] Transcription: \(text)")
-                if self.isLikelyHallucination(text: text, audio: audioData) {
+                if HallucinationFilter.isLikelyHallucination(text: text, audio: audioData) {
                     print("[LocalFlow] Dropped likely silence-hallucination: \(text)")
                     text = ""
                 }
@@ -495,10 +516,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         text = await CleanupService.cleanup(text)
                     }
                     if effective.punctuation {
-                        text = self.addPunctuation(text)
+                        text = TranscriptionFormatter.punctuate(text)
                     }
                     if effective.summary {
-                        text = self.formatAsSummary(text)
+                        text = TranscriptionFormatter.bulletSummary(text)
                     }
                 }
 
@@ -543,38 +564,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return (settings.punctuationMode, settings.clipboardMode, settings.summaryModeEnabled)
     }
 
-    private func addPunctuation(_ text: String) -> String {
-        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if result.isEmpty { return result }
-
-        let firstChar = result.removeFirst()
-        result = String(firstChar).uppercased() + result
-
-        let lastChar = result.last ?? Character(" ")
-        if !".!?".contains(lastChar) {
-            result += "."
-        }
-
-        return result
-    }
-
-    private func formatAsSummary(_ text: String) -> String {
-        let sentences = text
-            .replacingOccurrences(of: "? ", with: "?|")
-            .replacingOccurrences(of: ". ", with: ".|")
-            .replacingOccurrences(of: "! ", with: "!|")
-            .components(separatedBy: "|")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        if sentences.count <= 1 {
-            return text
-        }
-
-        return sentences.map { "• \($0)" }.joined(separator: "\n")
-    }
-
     private func updateMenuBarIcon(recording: Bool) {
         DispatchQueue.main.async { [weak self] in
             let imageName = recording ? "waveform.circle.fill" : "waveform"
@@ -585,30 +574,4 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // Whisper memorized end-of-video phrases from YouTube subtitles in its
-    // training data and emits them as confident transcripts when the audio is
-    // silent. We drop these when the audio energy is below a speech threshold.
-    private static let hallucinationPhrases: Set<String> = [
-        "thank you", "thank you.", "thanks for watching", "thanks for watching.",
-        "thanks for watching!", "thank you for watching", "thank you for watching.",
-        "thank you for watching!", "thanks", "thanks.", "thank you!",
-        "you", "you.", ".", "...", "bye", "bye.", "goodbye", "goodbye.",
-        "subtitles by the amara.org community",
-        "please subscribe", "like and subscribe",
-    ]
-
-    private func isLikelyHallucination(text: String, audio: [Float]) -> Bool {
-        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return false }
-        guard Self.hallucinationPhrases.contains(normalized) else { return false }
-
-        // Match a known hallucination phrase. Confirm by checking audio energy:
-        // if the recording was effectively silent, this is definitely a hallucination.
-        guard !audio.isEmpty else { return true }
-        var sumSquares: Float = 0
-        for sample in audio { sumSquares += sample * sample }
-        let rms = sqrt(sumSquares / Float(audio.count))
-        // Empirical: real speech RMS is typically > 0.01; ambient noise sits well below.
-        return rms < 0.005
-    }
 }

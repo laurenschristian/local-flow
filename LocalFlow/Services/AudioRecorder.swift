@@ -4,7 +4,6 @@ import Foundation
 
 class AudioRecorder {
     private var audioEngine: AVAudioEngine?
-    private var audioConverter: AVAudioConverter?
 
     // The audio tap callback writes to recordedSamples on a private CoreAudio
     // thread, while getCurrentSamples()/stopRecording() read it from other
@@ -32,12 +31,12 @@ class AudioRecorder {
         }
     }
 
-    // false = level metering only (settings meter); samples are discarded so a
-    // long-open meter doesn't grow memory unbounded.
-    private var collectSamples = true
-
-    func startRecording(collectSamples: Bool = true) {
-        self.collectSamples = collectSamples
+    // collectSamples=false: level metering only (settings meter); samples are
+    // discarded so a long-open meter doesn't grow memory unbounded.
+    // Returns false when the engine could not start; callers must not enter a
+    // recording state in that case.
+    @discardableResult
+    func startRecording(collectSamples: Bool = true) -> Bool {
         os_unfair_lock_lock(&samplesLock)
         recordedSamples.removeAll()
         recordedSamples.reserveCapacity(16000 * 30) // Pre-allocate for ~30 seconds
@@ -47,7 +46,7 @@ class AudioRecorder {
         // Fresh engine every start: a reused engine keeps stale AUHAL state after
         // the input device changes, and its cached formats go out of sync.
         audioEngine = AVAudioEngine()
-        guard let audioEngine = audioEngine else { return }
+        guard let audioEngine = audioEngine else { return false }
 
         let inputNode = audioEngine.inputNode
 
@@ -73,7 +72,7 @@ class AudioRecorder {
         let inputFormat = Self.hardwareInputFormat(of: inputNode) ?? inputNode.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             print("Input device reports invalid format, not recording")
-            return
+            return false
         }
 
         guard let whisperFormat = AVAudioFormat(
@@ -83,14 +82,13 @@ class AudioRecorder {
             interleaved: false
         ) else {
             print("Failed to create audio format")
-            return
+            return false
         }
 
         // Create converter once, reuse for all buffers
-        audioConverter = AVAudioConverter(from: inputFormat, to: whisperFormat)
-        if audioConverter == nil {
+        guard let converter = AVAudioConverter(from: inputFormat, to: whisperFormat) else {
             print("Failed to create converter \(inputFormat) -> \(whisperFormat), not recording")
-            return
+            return false
         }
 
         // Defensive: AVAudioEngine raises an NSException (→ SIGABRT, uncatchable in Swift)
@@ -98,8 +96,10 @@ class AudioRecorder {
         // fully tear down, or if the input device changed mid-session.
         inputNode.removeTap(onBus: 0)
 
+        // The converter is captured by the tap closure, not stored on self: the tap
+        // runs on a CoreAudio thread and must never race a property write from stop.
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            self?.processAudioBuffer(buffer)
+            self?.processAudioBuffer(buffer, converter: collectSamples ? converter : nil)
         }
 
         do {
@@ -107,7 +107,10 @@ class AudioRecorder {
             try audioEngine.start()
         } catch {
             print("Failed to start audio engine: \(error)")
+            inputNode.removeTap(onBus: 0)
+            return false
         }
+        return true
     }
 
     /// The device's true input format, read from the AUHAL (input scope, bus 1).
@@ -126,7 +129,7 @@ class AudioRecorder {
         )
     }
 
-    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter?) {
         // Calculate audio level using Accelerate framework would be faster,
         // but this is simple and runs on audio thread
         if let channelData = buffer.floatChannelData?[0], buffer.frameLength >= 4 {
@@ -145,9 +148,8 @@ class AudioRecorder {
             }
         }
 
-        guard collectSamples,
-              let converter = audioConverter,
-              let outputFormat = converter.outputFormat as AVAudioFormat? else { return }
+        guard let converter else { return }
+        let outputFormat = converter.outputFormat
 
         let ratio = outputFormat.sampleRate / converter.inputFormat.sampleRate
         let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 1)
@@ -191,7 +193,6 @@ class AudioRecorder {
     func stopRecording() -> [Float]? {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
-        audioConverter = nil
         currentLevel = 0.0
 
         os_unfair_lock_lock(&samplesLock)
