@@ -83,12 +83,17 @@ enum AudioDeviceManager {
     /// system default is a Bluetooth headset: opening that mic forces the
     /// headset into call mode, which wrecks whatever is playing through it.
     static func recordingDeviceID() -> AudioDeviceID? {
-        // A missing pick falls through to the Bluetooth guard, never to the headset.
-        if let uid = Settings.shared.selectedInputDeviceUID, let id = deviceID(forUID: uid) { return id }
-        guard Settings.shared.avoidBluetoothMic,
-              let current = defaultInputDevice(), isBluetooth(current.id),
-              let builtIn = builtInInputDevice() else { return nil }
-        return builtIn.id
+        let avoidBT = Settings.shared.avoidBluetoothMic
+        // The Bluetooth guard also applies to an explicit pick: AirPods sound
+        // terrible as a mic and force the headset into call mode.
+        if let uid = Settings.shared.selectedInputDeviceUID, let id = deviceID(forUID: uid) {
+            if !avoidBT || !isBluetooth(id) { return id }
+            print("[LocalFlow] Selected mic is Bluetooth - using a wired mic instead")
+        }
+        guard avoidBT, let current = defaultInputDevice(), isBluetooth(current.id) else { return nil }
+        if let builtIn = builtInInputDevice() { return builtIn.id }
+        // No built-in mic (desktop Mac): any non-Bluetooth input beats the headset.
+        return inputDevices().first { !isBluetooth($0.id) }?.id
     }
 
     static func builtInInputDevice() -> AudioInputDevice? {
@@ -137,12 +142,12 @@ enum AudioDeviceManager {
 
     /// Display name of the device recordings will actually use.
     static func activeInputDeviceName() -> String {
-        if let uid = Settings.shared.selectedInputDeviceUID {
-            if let name = deviceName(forUID: uid) { return name }
-            return "Missing device (using default)"
-        }
         if let id = recordingDeviceID(), let device = inputDevices().first(where: { $0.id == id }) {
+            if Settings.shared.selectedInputDeviceUID == device.uid { return device.name }
             return "\(device.name) (Bluetooth mic avoided)"
+        }
+        if let uid = Settings.shared.selectedInputDeviceUID, deviceName(forUID: uid) == nil {
+            return "Missing device (using default)"
         }
         return defaultInputDevice()?.name ?? "System default"
     }

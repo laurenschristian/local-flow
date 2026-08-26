@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Combine
 import UniformTypeIdentifiers
 import ApplicationServices
 
@@ -1379,6 +1380,7 @@ struct HistoryRow: View {
 
 /// Live input metering for the settings mic picker. Reuses AudioRecorder in
 /// level-only mode so device selection behaves exactly like a real recording.
+@MainActor
 final class MicLevelMonitor: ObservableObject {
     @Published var level: Float = 0
     @Published var looksSilent = false
@@ -1387,6 +1389,25 @@ final class MicLevelMonitor: ObservableObject {
     private var running = false
     private var startedAt = Date.distantPast
     private var peak: Float = 0
+    private var suspendedForRecording = false
+    private var statusCancellable: AnyCancellable?
+
+    init() {
+        // Yield the mic while a real recording runs; two engines on one device
+        // is wasteful and can fight over Bluetooth/aggregate devices.
+        statusCancellable = AppState.shared.$status
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                guard let self else { return }
+                if status == .recording, self.running {
+                    self.stop()
+                    self.suspendedForRecording = true
+                } else if status != .recording, self.suspendedForRecording {
+                    self.suspendedForRecording = false
+                    self.start()
+                }
+            }
+    }
 
     func start() {
         guard !running else { return }
@@ -1404,6 +1425,9 @@ final class MicLevelMonitor: ObservableObject {
     }
 
     func stop() {
+        // An outside stop (view closing) also cancels any pending auto-resume;
+        // the suspend path re-arms the flag right after calling stop().
+        suspendedForRecording = false
         guard running else { return }
         running = false
         _ = recorder.stopRecording()
