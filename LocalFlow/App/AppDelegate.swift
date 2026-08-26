@@ -54,7 +54,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await whisperService?.unloadModel()
             semaphore.signal()
         }
-        _ = semaphore.wait(timeout: .now() + 2.0)
+        // Unload is normally <100ms; the cap only bounds a hung Metal teardown.
+        _ = semaphore.wait(timeout: .now() + 1.0)
     }
 
     private func shouldShowOnboarding() -> Bool {
@@ -364,7 +365,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if case .error = AppState.shared.status {
             AppState.shared.status = .idle
         }
-        guard AppState.shared.status == .idle else {
+        // .transcribing is allowed: the recorder is free once samples are handed
+        // to whisper, so the next dictation can start while the last one processes.
+        guard AppState.shared.status == .idle || AppState.shared.status == .transcribing else {
             print("[LocalFlow] Cannot start recording - status is \(AppState.shared.status)")
             // The hotkey manager already entered its holding state; drop it so
             // the following release doesn't act on a recording that never started.
@@ -475,17 +478,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         print("[LocalFlow] Got \(audioData.count) audio samples, transcribing...")
 
+        // Captured now: a new recording may start (and overwrite the shared
+        // fields) before this transcription finishes.
+        let bundleIdForThisRecording = activeAppBundleId
+        activeAppBundleId = nil
+
         Task {
             // Reload model if it was unloaded due to idle timeout
             if await !whisperService.modelLoaded {
                 print("[LocalFlow] Reloading model...")
                 await MainActor.run {
-                    AppState.shared.status = .loading
+                    if AppState.shared.status != .recording {
+                        AppState.shared.status = .loading
+                    }
                 }
                 let loaded = await whisperService.loadModel(path: settings.modelPath)
                 if !loaded {
                     await MainActor.run {
-                        RecordingOverlayController.shared.hide()
+                        if AppState.shared.status != .recording {
+                            RecordingOverlayController.shared.hide()
+                        }
                         self.failWithError(.modelLoadFailed)
                     }
                     return
@@ -493,7 +505,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             await MainActor.run {
-                AppState.shared.status = .transcribing
+                if AppState.shared.status != .recording {
+                    AppState.shared.status = .transcribing
+                }
             }
 
             let result = await whisperService.transcribe(audioData: audioData, onSegment: nil)
@@ -507,7 +521,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 let (effective, commandsOn, cleanupOn) = await MainActor.run {
-                    (self.effectiveSettings(), self.settings.spokenCommandsEnabled, self.settings.cleanupModeEnabled)
+                    (self.effectiveSettings(for: bundleIdForThisRecording),
+                     self.settings.spokenCommandsEnabled, self.settings.cleanupModeEnabled)
                 }
 
                 if !text.isEmpty {
@@ -528,7 +543,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 await MainActor.run {
-                    RecordingOverlayController.shared.hide()
+                    // A newer recording may already be running; leave its
+                    // overlay and status untouched, just deliver the text.
+                    if AppState.shared.status != .recording {
+                        RecordingOverlayController.shared.hide()
+                        AppState.shared.status = .idle
+                    }
                     if !text.isEmpty {
                         let wordCount = text.split(separator: " ").count
                         self.settings.addWordsToStats(wordCount)
@@ -537,13 +557,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         self.settings.addToHistory(text)
                         self.textInserter.insertText(text, clipboardOnly: effective.clipboard)
                     }
-                    AppState.shared.status = .idle
-                    self.activeAppBundleId = nil
                 }
             case .failure(let error):
                 print("[LocalFlow] Transcription error: \(error)")
                 await MainActor.run {
-                    RecordingOverlayController.shared.hide()
+                    if AppState.shared.status != .recording {
+                        RecordingOverlayController.shared.hide()
+                    }
                     self.failWithError(.transcriptionFailed)
                 }
             }
@@ -552,6 +572,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Show an error briefly, then recover to idle so the hotkey keeps working.
     private func failWithError(_ error: AppError) {
+        // Never clobber an active recording with a stale error from the
+        // previous transcription; log only.
+        guard AppState.shared.status != .recording else {
+            print("[LocalFlow] Suppressed error during active recording: \(error.message)")
+            return
+        }
         AppState.shared.status = .error(error)
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
             if case .error = AppState.shared.status {
@@ -560,8 +586,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func effectiveSettings() -> (punctuation: Bool, clipboard: Bool, summary: Bool) {
-        if let bundleId = activeAppBundleId,
+    private func effectiveSettings(for bundleId: String?) -> (punctuation: Bool, clipboard: Bool, summary: Bool) {
+        if let bundleId,
            let profile = settings.profileForApp(bundleId) {
             return (profile.punctuationMode, profile.clipboardMode, profile.summaryMode)
         }

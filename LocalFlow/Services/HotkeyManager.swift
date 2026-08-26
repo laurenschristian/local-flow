@@ -240,6 +240,12 @@ class HotkeyManager {
                 guard recordingMode == .hold else {
                     return Unmanaged.passUnretained(event)
                 }
+                // Adding a second modifier mid-hold (e.g. Cmd while holding Option)
+                // makes isKeyPressed false but is not a release: only stop once the
+                // trigger key itself is actually up.
+                guard !isTriggerFlagPresent(flags: flags) else {
+                    return Unmanaged.passUnretained(event)
+                }
                 isHolding = false
                 holdStartTime = nil
                 let sinceDouble = doubleTapAt.map { Date().timeIntervalSince($0) } ?? .infinity
@@ -265,6 +271,15 @@ class HotkeyManager {
         }
 
         return Unmanaged.passUnretained(event)
+    }
+
+    /// Whether the trigger key itself is physically down, combos included.
+    private func isTriggerFlagPresent(flags: CGEventFlags) -> Bool {
+        switch currentTriggerKey {
+        case .option, .rightOption: return flags.contains(.maskAlternate)
+        case .control: return flags.contains(.maskControl)
+        case .fn: return flags.contains(.maskSecondaryFn)
+        }
     }
 
     private func isModifierKeyPressed(flags: CGEventFlags, triggerKey: TriggerKey) -> Bool {
