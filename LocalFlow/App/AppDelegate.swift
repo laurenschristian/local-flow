@@ -383,6 +383,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if settings.soundFeedback {
+            // NSSound.play() is a no-op while still playing; stop first so
+            // rapid start/stop cycles never swallow the cue.
+            startSound?.stop()
             startSound?.play()
         }
 
@@ -448,6 +451,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         liveTranscriptionTask = nil
 
         if settings.soundFeedback {
+            stopSound?.stop()
             stopSound?.play()
         }
 
