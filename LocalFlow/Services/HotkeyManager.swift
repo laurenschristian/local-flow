@@ -94,8 +94,7 @@ class HotkeyManager {
         if isHolding, let startTime = holdStartTime {
             if Date().timeIntervalSince(startTime) > maxHoldDuration {
                 print("[HotkeyManager] Hold exceeded max duration - forcing release")
-                isHolding = false
-                holdStartTime = nil
+                resetHoldState()
                 DispatchQueue.main.async { [weak self] in
                     self?.onKeyUp?()
                 }
@@ -106,16 +105,26 @@ class HotkeyManager {
             print("[HotkeyManager] Event tap was disabled - re-enabling...")
             CGEvent.tapEnable(tap: tap, enable: true)
             // Reset state since we may have missed key release events
-            if isHolding {
+            let wasHolding = isHolding
+            resetHoldState()
+            if wasHolding {
                 print("[HotkeyManager] Resetting stuck isHolding state")
-                isHolding = false
-                holdStartTime = nil
                 DispatchQueue.main.async { [weak self] in
                     self?.onKeyUp?()
                 }
             }
-            tapTimes.removeAll()
         }
+    }
+
+    /// Drops all tap/hold tracking. Called whenever the app refuses or aborts a
+    /// recording so the manager never believes a recording is running that isn't.
+    func resetHoldState() {
+        isHolding = false
+        holdStartTime = nil
+        doubleTapAt = nil
+        pendingStopWork?.cancel()
+        pendingStopWork = nil
+        tapTimes.removeAll()
     }
 
     func stopMonitoring() {
@@ -158,9 +167,7 @@ class HotkeyManager {
             }
             // Reset state since we may have missed events
             let wasHolding = isHolding
-            isHolding = false
-            holdStartTime = nil
-            tapTimes.removeAll()
+            resetHoldState()
             if wasHolding {
                 DispatchQueue.main.async { [weak self] in
                     self?.onKeyUp?()
@@ -197,6 +204,10 @@ class HotkeyManager {
                 } else if recentTaps.count == 2 {
                     // Double-tap: start recording (hold to continue).
                     // Keep tapTimes so a third tap can still become a triple-tap.
+                    // A deferred stop from a previous quick release must die here,
+                    // or it would stop this new recording milliseconds after start.
+                    pendingStopWork?.cancel()
+                    pendingStopWork = nil
                     print("[HotkeyManager] DOUBLE-TAP DETECTED!")
                     isHolding = true
                     holdStartTime = Date()
@@ -238,6 +249,7 @@ class HotkeyManager {
                     print("[HotkeyManager] Quick release - deferring stop briefly")
                     let work = DispatchWorkItem { [weak self] in
                         self?.pendingStopWork = nil
+                        self?.doubleTapAt = nil
                         self?.onKeyUp?()
                     }
                     pendingStopWork = work

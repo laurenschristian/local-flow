@@ -76,6 +76,22 @@ targets:
       - package: Sparkle
         product: Sparkle
 
+  # Pure-logic unit tests. Compiles only whisper-free sources so no host app,
+  # model, or Metal stack is needed to run them.
+  LocalFlowTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: LocalFlowTests
+      - path: LocalFlow/Services/SilenceTrimmer.swift
+      - path: LocalFlow/Services/SpokenCommands.swift
+      - path: LocalFlow/Services/TranscriptionPostProcessing.swift
+    settings:
+      base:
+        PRODUCT_NAME: LocalFlowTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.localflow.tests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   LocalFlow:
     build:
@@ -89,3 +105,6 @@ schemes:
       config: Debug
     archive:
       config: Release
+    test:
+      targets:
+        - LocalFlowTests
