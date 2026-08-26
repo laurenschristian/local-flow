@@ -27,6 +27,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var activeAppBundleId: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Start Sparkle now. The controller is lazy, so without this touch the
+        // updater only ever existed after a manual "Updates" click and the
+        // automatic background check never ran once in the app's life.
+        _ = UpdateController.shared
         setupServices()
         setupSounds()
         setupSoundsObserver()
