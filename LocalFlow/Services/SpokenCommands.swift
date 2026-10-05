@@ -43,6 +43,8 @@ enum SpokenCommands {
             result = String(result[range.upperBound...])
         }
 
+        result = applySelfCorrections(result)
+
         for command in commands {
             result = command.regex.stringByReplacingMatches(
                 in: result,
@@ -58,6 +60,30 @@ enum SpokenCommands {
             result = result.replacingOccurrences(of: "  ", with: " ")
         }
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // "X, no wait, Y" / "X, I mean Y": a short correction Y at the end of a sentence
+    // replaces the same number of words right before the marker.
+    private static let correction = try? NSRegularExpression(
+        pattern: "(?i)(\\S[^.!?\\n]*?)[,]?\\s+(?:no wait|sorry,? i mean|i mean)[,]?\\s+([^.!?\\n,]+?)([.!?]|$)"
+    )
+
+    static func applySelfCorrections(_ text: String) -> String {
+        guard let regex = correction else { return text }
+        var result = text
+        // Rescan after each rewrite so ranges never go stale.
+        while let match = regex.firstMatch(in: result, range: fullRange(of: result)),
+              let whole = Range(match.range, in: result),
+              let beforeRange = Range(match.range(at: 1), in: result),
+              let fixRange = Range(match.range(at: 2), in: result),
+              let endRange = Range(match.range(at: 3), in: result) {
+            let before = result[beforeRange].split(separator: " ")
+            let fix = result[fixRange].split(separator: " ")
+            guard (1...4).contains(fix.count), before.count > fix.count else { break }
+            let kept = (before.dropLast(fix.count) + fix).joined(separator: " ")
+            result.replaceSubrange(whole, with: kept + result[endRange])
+        }
+        return result
     }
 
     private static func fullRange(of string: String) -> NSRange {

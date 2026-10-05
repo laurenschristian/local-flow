@@ -60,6 +60,33 @@ final class TranscriptionFormatterTests: XCTestCase {
     }
 }
 
+final class SelfCorrectionTests: XCTestCase {
+    func testIMeanReplacesTheCorrectedWord() {
+        XCTAssertEqual(SpokenCommands.applySelfCorrections("Send it to John, I mean Sarah."), "Send it to Sarah.")
+    }
+
+    func testNoWaitReplacesTheSameNumberOfWords() {
+        XCTAssertEqual(SpokenCommands.applySelfCorrections("Meet at 3, no wait, at 4"), "Meet at 4")
+    }
+
+    func testSorryIMeanWorks() {
+        XCTAssertEqual(SpokenCommands.applySelfCorrections("Call Tom, sorry, I mean Tim."), "Call Tim.")
+    }
+
+    func testSentenceStartingWithIMeanIsUntouched() {
+        XCTAssertEqual(SpokenCommands.applySelfCorrections("I mean, it's fine."), "I mean, it's fine.")
+    }
+
+    func testLongContinuationIsNotACorrection() {
+        let text = "It works, I mean it really does work well for most of us."
+        XCTAssertEqual(SpokenCommands.applySelfCorrections(text), text)
+    }
+
+    func testOtherSentencesAreKept() {
+        XCTAssertEqual(SpokenCommands.applySelfCorrections("Hi team. Ship on Friday, no wait, Monday."), "Hi team. Ship on Monday.")
+    }
+}
+
 final class SpokenCommandsTests: XCTestCase {
     func testCommaCommand() {
         XCTAssertEqual(SpokenCommands.apply(to: "apples comma oranges"), "apples, oranges")

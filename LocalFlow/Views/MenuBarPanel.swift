@@ -32,6 +32,7 @@ struct MenuBarPanelView: View {
             Circle()
                 .fill(appState.status.color)
                 .frame(width: 8, height: 8)
+                .animation(.easeInOut(duration: 0.25), value: appState.status.displayText)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("LocalFlow")
@@ -213,7 +214,7 @@ private struct RecentRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
+        .onHover { hovering in withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering } }
         .help(entry.text)
     }
 }
@@ -232,7 +233,7 @@ private struct FooterButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
+        .onHover { hovering in withAnimation(.easeOut(duration: 0.12)) { isHovering = hovering } }
     }
 }
 

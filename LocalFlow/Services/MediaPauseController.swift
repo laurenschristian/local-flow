@@ -58,7 +58,14 @@ final class MediaPauseController {
     /// Blocking variant for app termination, where a queued resume would never
     /// run and would leave the user's music paused for good.
     func resumeAfterRecordingNow() {
-        queue.sync { self.resume(waitForOutput: false) }
+        // Bounded: a stuck AppleScript (e.g. an unanswered Automation prompt) on the
+        // queue must not block app termination forever.
+        let done = DispatchSemaphore(value: 0)
+        queue.async {
+            self.resume(waitForOutput: false)
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 2.0)
     }
 
     private func resume(waitForOutput: Bool) {

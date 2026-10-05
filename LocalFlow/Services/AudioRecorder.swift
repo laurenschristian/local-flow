@@ -19,10 +19,6 @@ class AudioRecorder {
     private let sampleRate: Double = 16000 // Whisper expects 16kHz
     private let channelCount: AVAudioChannelCount = 1
 
-    init() {
-        audioEngine = AVAudioEngine()
-    }
-
     func requestPermission(completion: @escaping (Bool) -> Void) {
         AVCaptureDevice.requestAccess(for: .audio) { granted in
             DispatchQueue.main.async {
@@ -44,7 +40,8 @@ class AudioRecorder {
         currentLevel = 0.0
 
         // Fresh engine every start: a reused engine keeps stale AUHAL state after
-        // the input device changes, and its cached formats go out of sync.
+        // the input device changes. Tear the old one down first or it keeps the mic open.
+        teardownEngine()
         audioEngine = AVAudioEngine()
         guard let audioEngine = audioEngine else { return false }
 
@@ -191,8 +188,7 @@ class AudioRecorder {
     }
 
     func stopRecording() -> [Float]? {
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
+        teardownEngine()
         currentLevel = 0.0
 
         os_unfair_lock_lock(&samplesLock)
@@ -201,5 +197,13 @@ class AudioRecorder {
         let samples = recordedSamples
         recordedSamples.removeAll(keepingCapacity: false) // Release memory
         return samples
+    }
+
+    // Releasing the engine (not just stopping it) lets coreaudiod drop the input stream.
+    private func teardownEngine() {
+        guard let engine = audioEngine else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        audioEngine = nil
     }
 }

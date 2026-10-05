@@ -383,6 +383,14 @@ struct SettingsView: View {
                 CardDivider()
 
                 SettingsToggle(
+                    title: "Full-speed live preview on battery",
+                    description: "Off saves battery: live text updates every 3 seconds instead of every second",
+                    isOn: $settings.livePreviewOnBattery
+                )
+
+                CardDivider()
+
+                SettingsToggle(
                     title: "Auto-punctuation",
                     description: "Add periods and capitalize sentences",
                     isOn: $settings.punctuationMode

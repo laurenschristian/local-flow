@@ -24,22 +24,29 @@
 
 ---
 
-LocalFlow is a privacy-first voice dictation app for macOS. Speech recognition runs 100% locally using OpenAI's Whisper model—no internet connection required, no data ever leaves your device.
+LocalFlow is a privacy-first voice dictation app for macOS. Speech recognition runs 100% locally using OpenAI's Whisper model, no internet connection required, no data ever leaves your device.
+
+<p align="center">
+  <img src="docs/images/overlay-recording.png" alt="LocalFlow recording overlay" width="480">
+</p>
 
 ## Features
 
-- **Double-tap to dictate** — Double-tap Option key, hold and speak, release to transcribe
-- **Works in any app** — Text is inserted wherever your cursor is
-- **Auto-updates** — Built-in update system keeps you current
-- **Visual feedback** — Floating overlay with live audio waveform
-- **Punctuation mode** — Automatically add punctuation
-- **Clipboard mode** — Copy to clipboard without auto-pasting
-- **History** — Access your recent transcriptions
-- **Custom hotkey** — Configure your preferred trigger key
-- **Sound feedback** — Audio cues for recording start/stop
-- **Auto-launch** — Start LocalFlow when you log in
-- **Fast** — Sub-second transcription on Apple Silicon
-- **Private** — No cloud, no telemetry, no data collection
+- **Double-tap to dictate**: Double-tap Option key, hold and speak, release to transcribe
+- **Works in any app**: Text is inserted wherever your cursor is
+- **Auto-updates**: Built-in update system keeps you current
+- **Visual feedback**: Minimal floating pill with live waveform, timer, and live text
+- **Self-corrections**: Say "John, I mean Sarah" and only "Sarah" is kept
+- **Battery aware**: Live preview slows down on battery to save power
+- **Clipboard friendly**: Your clipboard is restored and dictations stay out of clipboard managers
+- **Punctuation mode**: Automatically add punctuation
+- **Clipboard mode**: Copy to clipboard without auto-pasting
+- **History**: Access your recent transcriptions
+- **Custom hotkey**: Configure your preferred trigger key
+- **Sound feedback**: Audio cues for recording start/stop
+- **Auto-launch**: Start LocalFlow when you log in
+- **Fast**: Sub-second transcription on Apple Silicon
+- **Private**: No cloud, no telemetry, no data collection
 
 ## Requirements
 
@@ -54,15 +61,15 @@ LocalFlow is a privacy-first voice dictation app for macOS. Speech recognition r
 
 2. **Open the DMG** and drag LocalFlow to Applications
 
-3. **First launch** — Right-click LocalFlow.app and select "Open"
+3. **First launch**: Right-click LocalFlow.app and select "Open"
 
    > macOS will warn that the app is from an unidentified developer. Click "Open" to proceed. This only happens once.
 
 4. **Grant permissions** when prompted:
-   - **Accessibility** — Required for hotkey detection and text insertion
-   - **Microphone** — Required for voice recording
+   - **Accessibility**: Required for hotkey detection and text insertion
+   - **Microphone**: Required for voice recording
 
-5. **Download a model** — Go to Settings > Model and download your preferred model
+5. **Download a model**: Go to Settings > Model and download your preferred model
 
 That's it! Double-tap Option to start dictating.
 
@@ -121,10 +128,10 @@ Access settings via the menu bar icon.
 
 ## Documentation
 
-- [Installation Guide](docs/INSTALL.md) — Build from source
-- [Model Comparison](docs/MODELS.md) — Choose the right model
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — Common issues
-- [Privacy Policy](docs/PRIVACY.md) — How your data is handled
+- [Installation Guide](docs/INSTALL.md): Build from source
+- [Model Comparison](docs/MODELS.md): Choose the right model
+- [Troubleshooting](docs/TROUBLESHOOTING.md): Common issues
+- [Privacy Policy](docs/PRIVACY.md): How your data is handled
 
 ## Privacy
 
@@ -140,7 +147,7 @@ See our full [Privacy Policy](docs/PRIVACY.md).
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License: see [LICENSE](LICENSE) for details.
 
 ---
 

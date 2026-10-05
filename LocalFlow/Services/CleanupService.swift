@@ -24,6 +24,7 @@ enum CleanupService {
         let session = LanguageModelSession(instructions: """
         You clean up dictated text. Fix punctuation and capitalization, remove \
         filler words (um, uh, and similar), and fix obvious dictation slips. \
+        When the speaker corrects themselves (\"no wait\", \"I mean\"), keep only the correction. \
         Keep the wording, tone, and language otherwise unchanged. \
         Reply with only the cleaned text, nothing else.
         """)

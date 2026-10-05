@@ -2,6 +2,7 @@ import Cocoa
 import SwiftUI
 import AVFoundation
 import Combine
+import IOKit.ps
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -22,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var onboardingWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var settingsCloseObserver: NSObjectProtocol?
     private var liveTranscriptionTask: Task<Void, Never>?
     private var soundsObserver: NSObjectProtocol?
     private var activeAppBundleId: String?
@@ -54,7 +56,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Synchronously unload the model to free Metal resources properly
         let semaphore = DispatchSemaphore(value: 0)
-        Task {
+        // Detached: a main-actor Task could not run while this thread blocks on the semaphore.
+        Task.detached { [whisperService] in
             await whisperService?.unloadModel()
             semaphore.signal()
         }
@@ -277,6 +280,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         settingsWindow = window
+        // Closing only hides the window, so SwiftUI never fires onDisappear and the mic
+        // meter kept recording forever. Drop the view on close so it tears down.
+        settingsCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            if let observer = self.settingsCloseObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            self.settingsCloseObserver = nil
+            // Deferred so the view is not freed while AppKit is still closing the window.
+            DispatchQueue.main.async {
+                window.contentViewController = nil
+                if self.settingsWindow === window { self.settingsWindow = nil }
+            }
+        }
     }
 
     private func setupHotkey() {
@@ -420,6 +439,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startLiveTranscription() {
         liveTranscriptionTask?.cancel()
+        // The preview re-runs Whisper each tick; on battery a slower tick keeps text
+        // visible at about a third of the cost.
+        let tick: Double = !settings.livePreviewOnBattery && Self.isOnBattery() ? 3.0 : 1.0
         liveTranscriptionTask = Task {
             try? await Task.sleep(for: .seconds(1.5))
 
@@ -442,9 +464,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                     }
                 }
-                try? await Task.sleep(for: .seconds(1.0))
+                try? await Task.sleep(for: .seconds(tick))
             }
         }
+    }
+
+    private static func isOnBattery() -> Bool {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let type = IOPSGetProvidingPowerSourceType(info)?.takeUnretainedValue() else { return false }
+        return (type as String) == kIOPMBatteryPowerKey
     }
 
     private func stopRecordingAndTranscribe() {

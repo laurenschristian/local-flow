@@ -4,48 +4,60 @@ import AppKit
 class RecordingOverlayController {
     static let shared = RecordingOverlayController()
 
+    // Fixed transparent canvas: SwiftUI animates the pill inside it, so the window
+    // never resizes (resizing per text update made the old overlay jitter).
+    private static let canvasSize = NSSize(width: 520, height: 200)
+    private static let topInset: CGFloat = 36
+
     private var window: NSWindow?
-    private var hostingView: NSHostingView<RecordingOverlayView>?
-    private var viewModel = RecordingOverlayViewModel()
+    private var hideWork: DispatchWorkItem?
+    private let viewModel = RecordingOverlayViewModel()
 
     private init() {}
 
     func show() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.viewModel.status = .recording
-            self.viewModel.isVisible = true
-            self.viewModel.audioLevel = 0
-            self.viewModel.partialText = ""
-            self.viewModel.previousText = ""
-            self.viewModel.micName = AudioDeviceManager.activeInputDeviceName()
-            self.viewModel.recordingStart = Date()
-            self.viewModel.peakLevel = 0
-            self.viewModel.smoothedLevel = 0
-            self.viewModel.showsSilenceHint = false
-            self.viewModel.stopHint = Settings.shared.recordingMode == .toggle
+            self.hideWork?.cancel()
+            let vm = self.viewModel
+            vm.status = .recording
+            vm.audioLevel = 0
+            vm.partialText = ""
+            vm.micName = AudioDeviceManager.activeInputDeviceName()
+            vm.recordingStart = Date()
+            vm.peakLevel = 0
+            vm.smoothedLevel = 0
+            vm.showsSilenceHint = false
+            vm.stopHint = Settings.shared.recordingMode == .toggle
                 ? "Tap \(Settings.shared.triggerKey.displayName) to stop"
                 : nil
-            self.createAndShowWindow()
+            self.createWindowIfNeeded()
+            self.positionWindow()
+            self.window?.orderFrontRegardless()
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                vm.isVisible = true
+            }
         }
     }
 
     func hide() {
         DispatchQueue.main.async { [weak self] in
-            self?.viewModel.isVisible = false
-            self?.viewModel.audioLevel = 0
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                self?.window?.orderOut(nil)
-                self?.window = nil
-                self?.hostingView = nil
+            guard let self else { return }
+            withAnimation(.easeIn(duration: 0.18)) {
+                self.viewModel.isVisible = false
             }
+            self.viewModel.audioLevel = 0
+            let work = DispatchWorkItem { [weak self] in self?.window?.orderOut(nil) }
+            self.hideWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: work)
         }
     }
 
     func updateStatus(_ status: RecordingStatus) {
         DispatchQueue.main.async { [weak self] in
-            self?.viewModel.status = status
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                self?.viewModel.status = status
+            }
         }
     }
 
@@ -63,81 +75,50 @@ class RecordingOverlayController {
             let elapsed = Date().timeIntervalSince(vm.recordingStart)
             let silent = vm.status == .recording && elapsed > 2.5 && vm.peakLevel < 0.02
             if vm.showsSilenceHint != silent {
-                vm.showsSilenceHint = silent
-                self?.resizeWindowIfNeeded()
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    vm.showsSilenceHint = silent
+                }
             }
         }
     }
 
     func updatePartialText(_ text: String) {
         DispatchQueue.main.async { [weak self] in
-            self?.viewModel.updateText(text)
-            self?.resizeWindowIfNeeded()
-        }
-    }
-
-    private func resizeWindowIfNeeded() {
-        guard let window = window, let hostingView = hostingView else { return }
-        let size = hostingView.fittingSize
-        let newWidth = max(360, min(420, size.width))
-        let newHeight = max(100, min(180, size.height))
-
-        if let screen = NSScreen.main {
-            let screenFrame = screen.visibleFrame
-            let x = screenFrame.midX - newWidth / 2
-            let y = screenFrame.maxY - newHeight - 60
-
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                window.animator().setFrame(NSRect(x: x, y: y, width: newWidth, height: newHeight), display: true)
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
+                self?.viewModel.partialText = text
             }
-            hostingView.frame = NSRect(x: 0, y: 0, width: newWidth, height: newHeight)
         }
     }
 
-    private func createAndShowWindow() {
-        if window != nil { return }
+    private func positionWindow() {
+        guard let window, let screen = NSScreen.main else { return }
+        let frame = screen.visibleFrame
+        let size = Self.canvasSize
+        window.setFrame(NSRect(
+            x: frame.midX - size.width / 2,
+            y: frame.maxY - size.height - Self.topInset + 24,
+            width: size.width,
+            height: size.height
+        ), display: false)
+    }
 
-        let overlayView = RecordingOverlayView(viewModel: viewModel)
-        let hostingView = NSHostingView(rootView: overlayView)
-
-        // Start with a good default size
-        let initialWidth: CGFloat = 360
-        let initialHeight: CGFloat = 100
-        hostingView.frame = NSRect(x: 0, y: 0, width: initialWidth, height: initialHeight)
-        // Clip the backing layer: the material backdrop ignores the SwiftUI
-        // shape clip in a transparent window and shows square black corners.
-        hostingView.wantsLayer = true
-        hostingView.layer?.cornerRadius = AppStyle.Layout.cornerRadius
-        hostingView.layer?.cornerCurve = .continuous
-        hostingView.layer?.masksToBounds = true
-        self.hostingView = hostingView
-
+    private func createWindowIfNeeded() {
+        guard window == nil else { return }
+        let hostingView = NSHostingView(rootView: RecordingOverlayView(viewModel: viewModel))
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: initialWidth, height: initialHeight),
+            contentRect: NSRect(origin: .zero, size: Self.canvasSize),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
-
         window.contentView = hostingView
         window.isOpaque = false
         window.backgroundColor = .clear
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        window.isMovableByWindowBackground = false
         window.hasShadow = false
+        // The canvas is mostly transparent; it must never swallow clicks.
         window.ignoresMouseEvents = true
-
-        if let screen = NSScreen.main {
-            let screenFrame = screen.visibleFrame
-            let x = screenFrame.midX - initialWidth / 2
-            let y = screenFrame.maxY - initialHeight - 60
-            window.setFrameOrigin(NSPoint(x: x, y: y))
-        }
-
-        window.orderFront(nil)
         self.window = window
     }
 }
@@ -152,7 +133,6 @@ class RecordingOverlayViewModel: ObservableObject {
     @Published var isVisible: Bool = false
     @Published var audioLevel: CGFloat = 0
     @Published var partialText: String = ""
-    @Published var previousText: String = ""
     @Published var micName: String = ""
     @Published var showsSilenceHint: Bool = false
     @Published var stopHint: String?
@@ -160,127 +140,113 @@ class RecordingOverlayViewModel: ObservableObject {
     var peakLevel: CGFloat = 0
     // Read every frame by the TimelineView canvas; not published on purpose.
     var smoothedLevel: CGFloat = 0
-
-    func updateText(_ newText: String) {
-        previousText = partialText
-        partialText = newText
-    }
 }
 
 struct RecordingOverlayView: View {
     @ObservedObject var viewModel: RecordingOverlayViewModel
-    @State private var textId = UUID()
 
-    /// Get the last ~80 characters to show, keeping whole words
-    private var displayText: (faded: String, bright: String) {
+    /// Last ~90 characters, cut at a word boundary.
+    private var displayText: String {
         let full = viewModel.partialText
-        guard !full.isEmpty else { return ("", "") }
-
-        let maxChars = 80
-        if full.count <= maxChars {
-            // Show all, highlight last ~20 chars
-            let brightStart = max(0, full.count - 25)
-            let faded = String(full.prefix(brightStart))
-            let bright = String(full.suffix(full.count - brightStart))
-            return (faded, bright)
-        }
-
-        // Trim to last maxChars, break at word boundary
-        let trimmed = String(full.suffix(maxChars))
-        let words = trimmed.split(separator: " ", omittingEmptySubsequences: false)
-        let display = words.dropFirst().joined(separator: " ")
-
-        // Highlight last ~25 chars
-        let brightStart = max(0, display.count - 25)
-        let faded = String(display.prefix(brightStart))
-        let bright = String(display.suffix(display.count - brightStart))
-        return ("..." + faded, bright)
+        guard full.count > 90 else { return full }
+        let tail = full.suffix(90)
+        let words = tail.split(separator: " ").dropFirst()
+        return "\u{2026}" + words.joined(separator: " ")
     }
 
+    private var hasText: Bool { !viewModel.partialText.isEmpty }
+
     var body: some View {
-        VStack(spacing: 14) {
-            // Status indicator with improved waveform
-            HStack(spacing: 14) {
-                if viewModel.status == .recording {
-                    WaveformView(viewModel: viewModel)
-                        .frame(width: 48, height: 32)
-                } else {
-                    PulsingDotsView()
-                        .frame(width: 48, height: 32)
-                }
+        VStack(spacing: 0) {
+            pill
+                .scaleEffect(viewModel.isVisible ? 1 : 0.9, anchor: .top)
+                .offset(y: viewModel.isVisible ? 0 : -10)
+                .opacity(viewModel.isVisible ? 1 : 0)
+                .blur(radius: viewModel.isVisible ? 0 : 4)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(viewModel.status == .recording ? "Listening..." : "Processing...")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.9))
-
-                    if !viewModel.micName.isEmpty {
-                        Text(viewModel.micName)
-                            .font(.system(size: 11, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.45))
-                            .lineLimit(1)
+    private var pill: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ZStack {
+                    if viewModel.status == .recording {
+                        WaveformView(viewModel: viewModel)
+                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    } else {
+                        PulsingDotsView()
+                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
                     }
+                }
+                .frame(width: 26, height: 16)
+
+                Text(viewModel.status == .recording ? "Listening" : "Transcribing")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .contentTransition(.opacity)
+
+                if viewModel.status == .recording {
+                    ElapsedTimeView(start: viewModel.recordingStart)
+                        .transition(.opacity)
                 }
 
                 if viewModel.status == .recording, let hint = viewModel.stopHint {
-                    Spacer(minLength: 12)
                     Text(hint)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(.white.opacity(0.38))
                         .lineLimit(1)
+                        .padding(.leading, 4)
+                        .transition(.opacity)
                 }
             }
 
             if viewModel.showsSilenceHint {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("No audio detected. Check your microphone.")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundStyle(.orange)
-                .transition(.opacity)
+                Label("No audio. Check your microphone.", systemImage: "mic.slash")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.orange.opacity(0.95))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
-            // Live transcription - shows latest text, scrolls away old
-            if !viewModel.partialText.isEmpty {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-
-                    (Text(displayText.faded)
-                        .foregroundColor(.white.opacity(0.5))
-                    + Text(displayText.bright)
-                        .foregroundColor(.white)
-                        .bold()
-                    )
-                    .font(.system(size: 16, weight: .medium))
+            if hasText {
+                Text(displayText)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.88))
                     .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .shadow(color: .white.opacity(0.25), radius: 6)
-                    .id(textId)
-
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 40)
-                .onChange(of: viewModel.partialText) { _, _ in
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        textId = UUID()
-                    }
-                }
-            } else {
-                Text(" ")
-                    .font(.system(size: 16))
-                    .frame(minHeight: 40)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 400, alignment: .leading)
+                    .contentTransition(.opacity)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-        .frame(minWidth: 360, maxWidth: 440)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background {
-            GlassBackground()
+            RoundedRectangle(cornerRadius: hasText || viewModel.showsSilenceHint ? 16 : 22, style: .continuous)
+                .fill(Color(red: 0.08, green: 0.085, blue: 0.1).opacity(0.92))
+                .overlay {
+                    RoundedRectangle(cornerRadius: hasText || viewModel.showsSilenceHint ? 16 : 22, style: .continuous)
+                        .strokeBorder(.white.opacity(0.09), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
         }
-        .opacity(viewModel.isVisible ? 1 : 0)
+        .fixedSize(horizontal: !hasText, vertical: true)
+    }
+}
+
+/// mm:ss since the recording started, ticking once a second.
+struct ElapsedTimeView: View {
+    let start: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: start, by: 1)) { context in
+            let seconds = max(0, Int(context.date.timeIntervalSince(start)))
+            Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.45))
+        }
     }
 }
 
@@ -378,6 +344,7 @@ struct PulsingDotsView: View {
             vm.status = .recording
             vm.audioLevel = 0.6
             vm.partialText = "This is a test of the live transcription feature showing how text appears"
+            vm.recordingStart = Date()
             return vm
         }())
     }
