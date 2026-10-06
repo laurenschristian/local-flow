@@ -11,7 +11,11 @@ class RecordingOverlayController {
 
     private var window: NSWindow?
     private var hideWork: DispatchWorkItem?
+    private var mouseMonitors: [Any] = []
     private let viewModel = RecordingOverlayViewModel()
+
+    /// Read by the live-preview loop: hovering asks for full-speed preview.
+    var isHovering: Bool { viewModel.isHovering }
 
     private init() {}
 
@@ -37,14 +41,17 @@ class RecordingOverlayController {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                 vm.isVisible = true
             }
+            self.startHoverTracking()
         }
     }
 
     func hide() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            self.stopHoverTracking()
             withAnimation(.easeIn(duration: 0.18)) {
                 self.viewModel.isVisible = false
+                self.viewModel.isHovering = false
             }
             self.viewModel.audioLevel = 0
             let work = DispatchWorkItem { [weak self] in self?.window?.orderOut(nil) }
@@ -87,6 +94,38 @@ class RecordingOverlayController {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
                 self?.viewModel.partialText = text
             }
+        }
+    }
+
+    // The window ignores the mouse so clicks reach the app below; hover is detected
+    // by watching the pointer position instead.
+    private func startHoverTracking() {
+        guard mouseMonitors.isEmpty else { return }
+        let handler: (NSEvent) -> Void = { [weak self] _ in self?.updateHover() }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: handler) {
+            mouseMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { event in
+            handler(event)
+            return event
+        }) {
+            mouseMonitors.append(local)
+        }
+    }
+
+    private func stopHoverTracking() {
+        mouseMonitors.forEach(NSEvent.removeMonitor)
+        mouseMonitors.removeAll()
+    }
+
+    private func updateHover() {
+        guard let window else { return }
+        let mouse = NSEvent.mouseLocation
+        let point = CGPoint(x: mouse.x - window.frame.minX, y: window.frame.maxY - mouse.y)
+        let hovering = viewModel.pillFrame.insetBy(dx: -8, dy: -8).contains(point)
+        guard hovering != viewModel.isHovering else { return }
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            viewModel.isHovering = hovering
         }
     }
 
@@ -136,6 +175,9 @@ class RecordingOverlayViewModel: ObservableObject {
     @Published var micName: String = ""
     @Published var showsSilenceHint: Bool = false
     @Published var stopHint: String?
+    @Published var isHovering: Bool = false
+    /// Pill bounds in window coordinates (top-left origin), for hover hit-testing.
+    var pillFrame: CGRect = .zero
     var recordingStart: Date = .distantPast
     var peakLevel: CGFloat = 0
     // Read every frame by the TimelineView canvas; not published on purpose.
@@ -154,7 +196,7 @@ struct RecordingOverlayView: View {
         return "\u{2026}" + words.joined(separator: " ")
     }
 
-    private var hasText: Bool { !viewModel.partialText.isEmpty }
+    private var hasText: Bool { viewModel.isHovering && !viewModel.partialText.isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -210,6 +252,13 @@ struct RecordingOverlayView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
+            if viewModel.isHovering && viewModel.partialText.isEmpty && viewModel.status == .recording {
+                Text("Live text appears in a moment\u{2026}")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             if hasText {
                 Text(displayText)
                     .font(.system(size: 14, weight: .regular))
@@ -233,6 +282,13 @@ struct RecordingOverlayView: View {
                 .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
         }
         .fixedSize(horizontal: !hasText, vertical: true)
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { viewModel.pillFrame = geo.frame(in: .global) }
+                    .onChange(of: geo.frame(in: .global)) { _, frame in viewModel.pillFrame = frame }
+            }
+        }
     }
 }
 

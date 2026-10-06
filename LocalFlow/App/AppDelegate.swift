@@ -2,7 +2,6 @@ import Cocoa
 import SwiftUI
 import AVFoundation
 import Combine
-import IOKit.ps
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -439,9 +438,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startLiveTranscription() {
         liveTranscriptionTask?.cancel()
-        // The preview re-runs Whisper each tick; on battery a slower tick keeps text
-        // visible at about a third of the cost.
-        let tick: Double = !settings.livePreviewOnBattery && Self.isOnBattery() ? 3.0 : 1.0
         liveTranscriptionTask = Task {
             try? await Task.sleep(for: .seconds(1.5))
 
@@ -451,8 +447,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let livePreviewWindowSeconds = 8.0
 
             while !Task.isCancelled {
-                let isRecording = await MainActor.run { AppState.shared.status == .recording }
+                let (isRecording, hovering) = await MainActor.run {
+                    (AppState.shared.status == .recording, RecordingOverlayController.shared.isHovering)
+                }
                 guard isRecording else { break }
+                // The text only shows while the pill is hovered, so only transcribe then.
+                guard hovering else {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    continue
+                }
                 if let samples = audioRecorder.getCurrentSamples(tailSeconds: livePreviewWindowSeconds),
                    samples.count > 16000 {
                     let result = await whisperService.transcribe(audioData: samples, onSegment: nil)
@@ -464,15 +467,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                     }
                 }
-                try? await Task.sleep(for: .seconds(tick))
+                try? await Task.sleep(for: .seconds(1.0))
             }
         }
-    }
-
-    private static func isOnBattery() -> Bool {
-        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let type = IOPSGetProvidingPowerSourceType(info)?.takeUnretainedValue() else { return false }
-        return (type as String) == kIOPMBatteryPowerKey
     }
 
     private func stopRecordingAndTranscribe() {

@@ -35,9 +35,9 @@ LocalFlow is a privacy-first voice dictation app for macOS. Speech recognition r
 - **Double-tap to dictate**: Double-tap Option key, hold and speak, release to transcribe
 - **Works in any app**: Text is inserted wherever your cursor is
 - **Auto-updates**: Built-in update system keeps you current
-- **Visual feedback**: Minimal floating pill with live waveform, timer, and live text
+- **Visual feedback**: Minimal floating pill with live waveform and timer; hover it to see the live text
 - **Self-corrections**: Say "John, I mean Sarah" and only "Sarah" is kept
-- **Battery aware**: Live preview slows down on battery to save power
+- **Battery friendly**: Live transcription only runs while you hover the pill
 - **Clipboard friendly**: Your clipboard is restored and dictations stay out of clipboard managers
 - **Punctuation mode**: Automatically add punctuation
 - **Clipboard mode**: Copy to clipboard without auto-pasting

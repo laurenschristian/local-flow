@@ -326,12 +326,6 @@ class Settings: ObservableObject {
         }
     }
 
-    @Published var livePreviewOnBattery: Bool {
-        didSet {
-            defaults.set(livePreviewOnBattery, forKey: "livePreviewOnBattery")
-        }
-    }
-
     var modelPath: String {
         let modelsDir = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -399,7 +393,6 @@ class Settings: ObservableObject {
         self.cleanupModeEnabled = defaults.bool(forKey: "cleanupModeEnabled")
         self.trimSilenceEnabled = defaults.object(forKey: "trimSilenceEnabled") as? Bool ?? true
         self.pauseMediaWhileRecording = defaults.object(forKey: "pauseMediaWhileRecording") as? Bool ?? true
-        self.livePreviewOnBattery = defaults.object(forKey: "livePreviewOnBattery") as? Bool ?? false
 
         // Migrate from English-only model selection
         migrateFromEnglishModels()
