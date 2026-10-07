@@ -3,7 +3,11 @@ import CoreAudio
 import Foundation
 
 class AudioRecorder {
+    // Only touched on audioQueue. CoreAudio can hang inside AVAudioEngine.inputNode
+    // (seen: hours in GetSubDevices), so engine work must never run on the main thread.
     private var audioEngine: AVAudioEngine?
+    private let audioQueue = DispatchQueue(label: "LocalFlow.AudioRecorder", qos: .userInitiated)
+    private let startTimeout: DispatchTimeInterval = .seconds(3)
 
     // The audio tap callback writes to recordedSamples on a private CoreAudio
     // thread, while getCurrentSamples()/stopRecording() read it from other
@@ -31,17 +35,34 @@ class AudioRecorder {
     // discarded so a long-open meter doesn't grow memory unbounded.
     // Returns false when the engine could not start; callers must not enter a
     // recording state in that case.
+    // Waits at most startTimeout; a late start gets torn down so the mic never stays open.
     @discardableResult
     func startRecording(collectSamples: Bool = true) -> Bool {
+        currentLevel = 0.0
+        let done = DispatchSemaphore(value: 0)
+        var started = false
+        audioQueue.async { [self] in
+            started = startEngine(collectSamples: collectSamples)
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + startTimeout) == .success else {
+            print("Audio engine start timed out, CoreAudio is not responding")
+            audioQueue.async { [self] in teardownEngine() }
+            return false
+        }
+        return started
+    }
+
+    private func startEngine(collectSamples: Bool) -> Bool {
+        // Old engine first: its tap must stop before the buffer is reset.
+        teardownEngine()
         os_unfair_lock_lock(&samplesLock)
         recordedSamples.removeAll()
         recordedSamples.reserveCapacity(16000 * 30) // Pre-allocate for ~30 seconds
         os_unfair_lock_unlock(&samplesLock)
-        currentLevel = 0.0
 
         // Fresh engine every start: a reused engine keeps stale AUHAL state after
-        // the input device changes. Tear the old one down first or it keeps the mic open.
-        teardownEngine()
+        // the input device changes.
         audioEngine = AVAudioEngine()
         guard let audioEngine = audioEngine else { return false }
 
@@ -188,7 +209,13 @@ class AudioRecorder {
     }
 
     func stopRecording() -> [Float]? {
-        teardownEngine()
+        // Wait for teardown so the final buffer lands, but never hang on CoreAudio.
+        let done = DispatchSemaphore(value: 0)
+        audioQueue.async { [self] in
+            teardownEngine()
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + startTimeout)
         currentLevel = 0.0
 
         os_unfair_lock_lock(&samplesLock)
