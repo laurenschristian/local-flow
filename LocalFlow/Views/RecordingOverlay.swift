@@ -9,9 +9,10 @@ class RecordingOverlayController {
     private static let canvasSize = NSSize(width: 520, height: 200)
     private static let topInset: CGFloat = 36
 
-    private var window: NSWindow?
+    private var window: NSPanel?
     private var hideWork: DispatchWorkItem?
     private var mouseMonitors: [Any] = []
+    private var spaceObserver: NSObjectProtocol?
     private let viewModel = RecordingOverlayViewModel()
 
     /// Read by the live-preview loop: hovering asks for full-speed preview.
@@ -42,6 +43,7 @@ class RecordingOverlayController {
                 vm.isVisible = true
             }
             self.startHoverTracking()
+            self.startSpaceTracking()
         }
     }
 
@@ -49,6 +51,7 @@ class RecordingOverlayController {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.stopHoverTracking()
+            self.stopSpaceTracking()
             withAnimation(.easeIn(duration: 0.18)) {
                 self.viewModel.isVisible = false
                 self.viewModel.isHovering = false
@@ -118,6 +121,22 @@ class RecordingOverlayController {
         mouseMonitors.removeAll()
     }
 
+    // Re-front on Space switch so the pill follows into other desktops and full-screen apps.
+    private func startSpaceTracking() {
+        guard spaceObserver == nil else { return }
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.positionWindow()
+            self?.window?.orderFrontRegardless()
+        }
+    }
+
+    private func stopSpaceTracking() {
+        if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
+        spaceObserver = nil
+    }
+
     private func updateHover() {
         guard let window else { return }
         let mouse = NSEvent.mouseLocation
@@ -144,17 +163,21 @@ class RecordingOverlayController {
     private func createWindowIfNeeded() {
         guard window == nil else { return }
         let hostingView = NSHostingView(rootView: RecordingOverlayView(viewModel: viewModel))
-        let window = NSWindow(
+        // A non-activating panel is what macOS lets ride along across Spaces and over
+        // full-screen apps; a plain NSWindow stays pinned to the Space it was shown on.
+        let window = NSPanel(
             contentRect: NSRect(origin: .zero, size: Self.canvasSize),
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         window.contentView = hostingView
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.level = .floating
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        window.level = .statusBar
+        window.isFloatingPanel = true
+        window.hidesOnDeactivate = false
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         window.hasShadow = false
         // The canvas is mostly transparent; it must never swallow clicks.
         window.ignoresMouseEvents = true
