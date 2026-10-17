@@ -15,6 +15,8 @@ class HotkeyManager {
     private var pendingStopWork: DispatchWorkItem?
     private var triggerKeyObserver: NSObjectProtocol?
     private var tripleTapPending: Bool = false
+    private var toggleStopPressedAt: Date?
+    private var pressChorded: Bool = false
     private var healthCheckTimer: Timer?
 
     // Toggle mode is meant for long dictation, so its watchdog is generous.
@@ -42,7 +44,7 @@ class HotkeyManager {
             print("[HotkeyManager] WARNING: Accessibility permission NOT granted - hotkeys won't work!")
         }
 
-        let eventMask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
+        let eventMask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
 
         print("[HotkeyManager] Creating event tap for \(currentTriggerKey.displayName)...")
 
@@ -124,6 +126,8 @@ class HotkeyManager {
         doubleTapAt = nil
         pendingStopWork?.cancel()
         pendingStopWork = nil
+        toggleStopPressedAt = nil
+        pressChorded = false
         tapTimes.removeAll()
     }
 
@@ -176,11 +180,22 @@ class HotkeyManager {
             return Unmanaged.passUnretained(event)
         }
 
+        // A key pressed while the trigger is down makes it a shortcut (Ctrl+arrow switches
+        // Spaces), so that press must not count as a tap or a toggle stop.
+        if type == .keyDown {
+            if isTriggerFlagPresent(flags: event.flags) && !pressChorded {
+                pressChorded = true
+                if !isHolding && !tapTimes.isEmpty { tapTimes.removeLast() }
+            }
+            return Unmanaged.passUnretained(event)
+        }
+
         if type == .flagsChanged {
             let flags = event.flags
             let isKeyPressed = isModifierKeyPressed(flags: flags, triggerKey: currentTriggerKey)
 
             if isKeyPressed && !isHolding {
+                pressChorded = false
                 let now = Date()
 
                 // Clean up old taps outside the threshold window
@@ -217,33 +232,43 @@ class HotkeyManager {
                     }
                 }
             } else if isKeyPressed && isHolding && recordingMode == .toggle {
-                // Toggle mode: recording is active and the key was pressed again.
-                let sinceDouble = doubleTapAt.map { Date().timeIntervalSince($0) } ?? .infinity
-                isHolding = false
-                holdStartTime = nil
-                doubleTapAt = nil
-                tapTimes.removeAll()
-                if sinceDouble < doubleTapThreshold {
-                    // Third quick tap right after the double-tap: triple-tap re-paste
-                    print("[HotkeyManager] TRIPLE-TAP DETECTED (toggle)!")
-                    DispatchQueue.main.async { [weak self] in
-                        self?.onTripleTap?()
-                    }
-                } else {
-                    print("[HotkeyManager] Toggle stop")
-                    DispatchQueue.main.async { [weak self] in
-                        self?.onKeyUp?()
-                    }
-                }
+                // Toggle mode: the key was pressed again. Stop on its release, unless a
+                // shortcut key comes in between.
+                pressChorded = false
+                toggleStopPressedAt = Date()
             } else if !isKeyPressed && isHolding {
-                // Toggle mode ignores releases; only the next press stops.
-                guard recordingMode == .hold else {
-                    return Unmanaged.passUnretained(event)
-                }
                 // Adding a second modifier mid-hold (e.g. Cmd while holding Option)
-                // makes isKeyPressed false but is not a release: only stop once the
+                // makes isKeyPressed false but is not a release: only act once the
                 // trigger key itself is actually up.
                 guard !isTriggerFlagPresent(flags: flags) else {
+                    return Unmanaged.passUnretained(event)
+                }
+                if recordingMode == .toggle {
+                    guard let pressedAt = toggleStopPressedAt else {
+                        return Unmanaged.passUnretained(event)
+                    }
+                    toggleStopPressedAt = nil
+                    guard !pressChorded else {
+                        print("[HotkeyManager] Toggle press was a shortcut - still recording")
+                        return Unmanaged.passUnretained(event)
+                    }
+                    let sinceDouble = doubleTapAt.map { pressedAt.timeIntervalSince($0) } ?? .infinity
+                    isHolding = false
+                    holdStartTime = nil
+                    doubleTapAt = nil
+                    tapTimes.removeAll()
+                    if sinceDouble < doubleTapThreshold {
+                        // Third quick tap right after the double-tap: triple-tap re-paste
+                        print("[HotkeyManager] TRIPLE-TAP DETECTED (toggle)!")
+                        DispatchQueue.main.async { [weak self] in
+                            self?.onTripleTap?()
+                        }
+                    } else {
+                        print("[HotkeyManager] Toggle stop")
+                        DispatchQueue.main.async { [weak self] in
+                            self?.onKeyUp?()
+                        }
+                    }
                     return Unmanaged.passUnretained(event)
                 }
                 isHolding = false
